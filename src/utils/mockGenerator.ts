@@ -260,8 +260,6 @@ export function generateSubtasks(task: string, answers: string[], mode: SupportM
   const isPresentation = t.includes("ゼミ") || t.includes("発表") || t.includes("スライド") || t.includes("プレゼン");
   const isCareer = t.includes("就活") || t.includes("自己pr") || t.includes("面接") || t.includes("es");
   const isResearch = t.includes("研究") || t.includes("論文") || t.includes("卒論") || t.includes("計画");
-  const isCleaning = t.includes("掃除") || t.includes("片付け") || t.includes("部屋") || t.includes("整理");
-  const isReport = t.includes("レポート") || t.includes("課題") || t.includes("書く");
 
   // --- Overwhelmed Mode: 極小の2ステップだけ ---
   if (mode === "overwhelmed") {
@@ -318,7 +316,6 @@ export function generateSubtasks(task: string, answers: string[], mode: SupportM
   // --- Deep Mode: 5〜6ステップ ---
   if (mode === "deep") {
     if (isPresentation) {
-      const theme = answers[0] || "発表テーマ";
       const minutes = answers[1] || "指定時間";
       return [
         makeSub(prefix+"1", `発表の中心メッセージを明確な1文にする`, "方向性の核がすべてのスライドを導きます", "「〇〇を〇〇に伝える」形式の1文が書ければ完了", "medium", "10分", "中心メッセージ1文",
