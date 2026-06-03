@@ -111,8 +111,9 @@ export default function App() {
       setSelectedMode(result.recommendedMode);
       setAppStep("diagnosis");
     } catch (err) {
-      console.error(err);
-      alert("診断に失敗しました。もう一度お試しください。");
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('Diagnosis failed:', msg);
+      alert(`診断に失敗しました。\n\n${msg}`);
     } finally {
       setIsLoading(false);
       setLoadingMessage("");
