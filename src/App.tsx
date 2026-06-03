@@ -1,8 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  getDiagnosis,
-  generateSubtasks,
-  generateContextRecovery,
   getStatusAdvice,
   SUPPORT_MODES,
   type Subtask,
@@ -12,6 +9,7 @@ import {
   type SupportMode,
   type SubtaskStatus,
 } from "./utils/mockGenerator";
+import { getDiagnosis, generateSubtasks, generateContextRecovery } from "./utils/apiClient";
 
 type AppStep =
   | "landing"
@@ -69,6 +67,8 @@ export default function App() {
   const [interactiveAnswers, setInteractiveAnswers] = useState<string[]>([]);
   const [copySuccess, setCopySuccess] = useState(false);
   const [deleteConfirmTaskId, setDeleteConfirmTaskId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("");
 
   useEffect(() => {
     try {
@@ -99,14 +99,24 @@ export default function App() {
     document.getElementById("task-input")?.focus();
   };
 
-  const handleTaskSubmit = (e: React.FormEvent) => {
+  const handleTaskSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!originalTask.trim()) return;
-    const result = getDiagnosis(originalTask);
-    setDiagnosisResult(result);
-    setFollowUpAnswers(new Array(result.questions.length).fill(""));
-    setSelectedMode(result.recommendedMode);
-    setAppStep("diagnosis");
+    setIsLoading(true);
+    setLoadingMessage("タスクを診断中...");
+    try {
+      const result = await getDiagnosis(originalTask);
+      setDiagnosisResult(result);
+      setFollowUpAnswers(new Array(result.questions.length).fill(""));
+      setSelectedMode(result.recommendedMode);
+      setAppStep("diagnosis");
+    } catch (err) {
+      console.error(err);
+      alert("診断に失敗しました。もう一度お試しください。");
+    } finally {
+      setIsLoading(false);
+      setLoadingMessage("");
+    }
   };
 
   const handleDiagnosisAnswersSubmit = (e: React.FormEvent) => {
@@ -114,11 +124,21 @@ export default function App() {
     setAppStep("mode_select");
   };
 
-  const handleModeSelect = (mode: SupportMode) => {
-    const generated = generateSubtasks(originalTask, followUpAnswers, mode);
-    setSelectedMode(mode);
-    setEditingSubtasks(generated);
-    setAppStep("editing");
+  const handleModeSelect = async (mode: SupportMode) => {
+    setIsLoading(true);
+    setLoadingMessage("手順を生成中...");
+    try {
+      const generated = await generateSubtasks(originalTask, followUpAnswers, mode);
+      setSelectedMode(mode);
+      setEditingSubtasks(generated);
+      setAppStep("editing");
+    } catch (err) {
+      console.error(err);
+      alert("手順の生成に失敗しました。もう一度お試しください。");
+    } finally {
+      setIsLoading(false);
+      setLoadingMessage("");
+    }
   };
 
   const handleAnswerChange = (index: number, val: string) => {
@@ -218,6 +238,7 @@ export default function App() {
     setSelectedParentTaskId(taskId);
     setAppStep("parent_detail");
   };
+
 
   const currentSubtask = currentParentTask?.subtasks.find(s => s.id === selectedSubtaskId) || null;
 
@@ -907,6 +928,14 @@ FirstStep Keeper より温かい応援を込めて`;
       <footer>
         &copy; {new Date().getFullYear()} FirstStep Keeper. 温かく自分のペースで歩みを進めましょう。
       </footer>
+
+      {isLoading && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(255,255,255,0.85)", backdropFilter: "blur(4px)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 2000 }}>
+          <div style={{ width: "48px", height: "48px", border: "4px solid var(--primary-light)", borderTop: "4px solid var(--primary)", borderRadius: "50%", animation: "spin 0.8s linear infinite", marginBottom: "1rem" }} />
+          <p style={{ fontSize: "1rem", color: "var(--primary)", fontWeight: "600" }}>{loadingMessage}</p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
     </>
   );
 }
