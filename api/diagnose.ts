@@ -1,7 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const client = new Anthropic();
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 function extractJSON(text: string): string {
   const codeBlock = text.match(/```(?:json)?\n?([\s\S]*?)\n?```/);
@@ -43,13 +43,9 @@ recommendedModeの選び方:
 questionsはタスクの内容に完全に特化した具体的な質問にしてください。全ての文字列は日本語で。温かく非批判的なトーンで。`;
 
   try {
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5',
-      max_tokens: 1024,
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const response = await model.generateContent(prompt);
+    const text = response.response.text();
     const result = JSON.parse(extractJSON(text.trim()));
     return res.status(200).json(result);
   } catch (error) {

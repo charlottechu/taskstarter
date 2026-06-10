@@ -1,7 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const client = new Anthropic();
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 function extractJSON(text: string): string {
   const codeBlock = text.match(/```(?:json)?\n?([\s\S]*?)\n?```/);
@@ -64,13 +64,9 @@ ${answersText || '（なし）'}
 - 温かく、ユーザーを責めないトーン`;
 
   try {
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5',
-      max_tokens: 2048,
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const response = await model.generateContent(prompt);
+    const text = response.response.text();
     const subtasks = JSON.parse(extractJSON(text.trim()));
 
     const withIds = subtasks.map((s: Record<string, unknown>, i: number) => ({
