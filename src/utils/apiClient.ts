@@ -20,3 +20,30 @@ export async function generateSubtasks(
 export function generateContextRecovery(parentTask: ParentTask): ContextRecovery {
   return mockGenerateContextRecovery(parentTask);
 }
+
+export interface UnstuckResult {
+  empathyMessage: string;
+  options: Array<{
+    emoji: string;
+    label: string;
+    description: string;
+  }>;
+}
+
+export async function getUnstuckHelp(
+  parentTitle: string,
+  subtaskTitle: string,
+  whyItMatters: string,
+  notes: string
+): Promise<UnstuckResult> {
+  const res = await fetch('/api/unstuck', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parentTitle, subtaskTitle, whyItMatters, notes }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || 'Unstuck API failed');
+  }
+  return res.json();
+}

@@ -9,7 +9,7 @@ import {
   type SupportMode,
   type SubtaskStatus,
 } from "./utils/mockGenerator";
-import { getDiagnosis, generateSubtasks, generateContextRecovery } from "./utils/apiClient";
+import { getDiagnosis, generateSubtasks, generateContextRecovery, getUnstuckHelp, type UnstuckResult } from "./utils/apiClient";
 
 type AppStep =
   | "landing"
@@ -18,6 +18,14 @@ type AppStep =
   | "editing"
   | "parent_detail"
   | "work_mode";
+
+type EnergyLevel = "low" | "normal" | "high";
+
+const ENERGY_OPTIONS: Array<{ level: EnergyLevel; emoji: string; label: string; description: string }> = [
+  { level: "low", emoji: "😴", label: "低い", description: "今日はしんどい" },
+  { level: "normal", emoji: "😐", label: "普通", description: "いつも通り" },
+  { level: "high", emoji: "⚡", label: "高い", description: "やる気ある！" },
+];
 
 const STATUS_LABELS: Record<SubtaskStatus, string> = {
   not_started: "未着手",
@@ -69,6 +77,11 @@ export default function App() {
   const [deleteConfirmTaskId, setDeleteConfirmTaskId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
+  const [energyLevel, setEnergyLevel] = useState<EnergyLevel | null>(null);
+  const [showEnergyModal, setShowEnergyModal] = useState(false);
+  const [pendingSubtaskId, setPendingSubtaskId] = useState<string | null>(null);
+  const [unstuckResult, setUnstuckResult] = useState<UnstuckResult | null>(null);
+  const [isUnstuckLoading, setIsUnstuckLoading] = useState(false);
 
   useEffect(() => {
     try {
@@ -93,6 +106,11 @@ export default function App() {
     setSavedTasks(tasks);
     localStorage.setItem("firststep_tasks", JSON.stringify(tasks));
   };
+
+  useEffect(() => {
+    setEnergyLevel(null);
+    setUnstuckResult(null);
+  }, [selectedParentTaskId]);
 
   const handleExampleChipClick = (exampleText: string) => {
     setOriginalTask(exampleText);
@@ -218,6 +236,16 @@ export default function App() {
 
   const currentParentTask = savedTasks.find(t => t.id === selectedParentTaskId) || null;
 
+  const recommendedSubtaskIds: Set<string> = (() => {
+    if (!currentParentTask || !energyLevel || energyLevel === "normal") return new Set<string>();
+    const targetLoad = energyLevel === "low" ? "low" : "high";
+    return new Set(
+      currentParentTask.subtasks
+        .filter(s => s.status !== "completed" && s.mentalLoad === targetLoad)
+        .map(s => s.id)
+    );
+  })();
+
   const getProgressPercentage = (task: ParentTask) => {
     if (task.subtasks.length === 0) return 0;
     const completed = task.subtasks.filter(s => s.status === "completed").length;
@@ -253,7 +281,7 @@ export default function App() {
     ));
   };
 
-  const handleStartSubtaskWork = (subtaskId: string) => {
+  const startSubtaskWorkImpl = (subtaskId: string) => {
     if (!currentParentTask) return;
     const sub = currentParentTask.subtasks.find(s => s.id === subtaskId);
     if (!sub) return;
@@ -266,7 +294,45 @@ export default function App() {
     if (sub.status === "not_started") updateSubtaskField(subtaskId, { status: "active" });
     setTimeLeft(300);
     setIsTimerRunning(true);
+    setUnstuckResult(null);
     setAppStep("work_mode");
+  };
+
+  const handleStartSubtaskWork = (subtaskId: string) => {
+    if (energyLevel === null) {
+      setPendingSubtaskId(subtaskId);
+      setShowEnergyModal(true);
+    } else {
+      startSubtaskWorkImpl(subtaskId);
+    }
+  };
+
+  const handleEnergySelect = (level: EnergyLevel) => {
+    setEnergyLevel(level);
+    setShowEnergyModal(false);
+    if (pendingSubtaskId) {
+      startSubtaskWorkImpl(pendingSubtaskId);
+      setPendingSubtaskId(null);
+    }
+  };
+
+  const handleUnstuckClick = async () => {
+    if (!currentParentTask || !currentSubtask) return;
+    setIsUnstuckLoading(true);
+    try {
+      const result = await getUnstuckHelp(
+        currentParentTask.title,
+        currentSubtask.title,
+        currentSubtask.whyItMatters,
+        currentSubtask.notes
+      );
+      setUnstuckResult(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      alert(`サポートの取得に失敗しました。\n${msg}`);
+    } finally {
+      setIsUnstuckLoading(false);
+    }
   };
 
   const handleNotesChange = (text: string) => {
@@ -621,6 +687,29 @@ FirstStep Keeper より温かい応援を込めて`;
                 </div>
               </div>
 
+              {/* 精力レベルセレクター */}
+              <div className="energy-selector-bar">
+                <span className="energy-selector-label">🔋 今日の精力レベル</span>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  {ENERGY_OPTIONS.map(opt => (
+                    <button key={opt.level} onClick={() => setEnergyLevel(opt.level)}
+                      className={`energy-option-btn${energyLevel === opt.level ? " selected" : ""}`}>
+                      {opt.emoji} {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {!energyLevel && (
+                  <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontStyle: "italic" }}>
+                    ← 選ぶと最適な手順をハイライトします
+                  </span>
+                )}
+                {energyLevel && energyLevel !== "normal" && (
+                  <span style={{ fontSize: "0.78rem", color: "var(--primary)", fontWeight: "600" }}>
+                    {ENERGY_OPTIONS.find(o => o.level === energyLevel)?.description}に合った手順を提案中
+                  </span>
+                )}
+              </div>
+
               {/* コンテキスト復元カード */}
               {currentParentTask.contextRecovery && (
                 <div style={{ padding: "1.25rem 1.5rem", backgroundColor: "#f0f7ff", borderLeft: "4px solid #3b82f6", borderRadius: "1rem", marginBottom: "1.5rem" }}>
@@ -660,12 +749,13 @@ FirstStep Keeper より温かい応援を込めて`;
                 <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                   {currentParentTask.subtasks.map((sub) => {
                     const isCompleted = sub.status === "completed";
+                    const isRecommended = recommendedSubtaskIds.has(sub.id);
                     const advice = getStatusAdvice(sub.status);
                     return (
                       <div key={sub.id}
                         onClick={() => !isCompleted && handleStartSubtaskWork(sub.id)}
-                        className={`checklist-item ${isCompleted ? "checked" : ""}`}
-                        style={{ padding: "1.25rem", cursor: isCompleted ? "default" : "pointer", opacity: isCompleted ? 0.7 : 1, backgroundColor: isCompleted ? "var(--primary-light)" : "#ffffff", border: "1px solid var(--border)", borderRadius: "1.25rem", transition: "var(--transition-smooth)", display: "flex", gap: "1rem", alignItems: "flex-start" }}>
+                        className={`checklist-item ${isCompleted ? "checked" : ""}${isRecommended ? " recommended" : ""}`}
+                        style={{ padding: "1.25rem", cursor: isCompleted ? "default" : "pointer", opacity: isCompleted ? 0.7 : 1, backgroundColor: isCompleted ? "var(--primary-light)" : "#ffffff", border: isRecommended ? "2px solid var(--accent)" : "1px solid var(--border)", borderRadius: "1.25rem", transition: "var(--transition-smooth)", display: "flex", gap: "1rem", alignItems: "flex-start", boxShadow: isRecommended ? "0 4px 16px var(--accent-glow)" : "none" }}>
                         <div style={{ width: "22px", height: "22px", borderRadius: "5px", border: "2px solid var(--primary)", backgroundColor: isCompleted ? "var(--primary)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", color: "#ffffff", fontSize: "0.75rem", fontWeight: "bold", flexShrink: 0, marginTop: "2px" }}>
                           {isCompleted && "✓"}
                         </div>
@@ -674,6 +764,11 @@ FirstStep Keeper より温かい応援を込めて`;
                             <span className="checklist-text" style={{ fontSize: "1.05rem", fontWeight: "700", color: "var(--text-main)", textDecoration: isCompleted ? "line-through" : "none" }}>
                               {sub.title}
                             </span>
+                            {isRecommended && (
+                              <span style={{ fontSize: "0.72rem", padding: "0.2rem 0.6rem", borderRadius: "9999px", backgroundColor: "var(--accent)", color: "#fff", fontWeight: "700" }}>
+                                👉 今のあなたにおすすめ
+                              </span>
+                            )}
                             <span style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem", borderRadius: "9999px", backgroundColor: STATUS_COLORS[sub.status] + "22", color: STATUS_COLORS[sub.status], fontWeight: "700", border: `1px solid ${STATUS_COLORS[sub.status]}44` }}>
                               {STATUS_LABELS[sub.status]}
                             </span>
@@ -855,6 +950,34 @@ FirstStep Keeper より温かい応援を込めて`;
                   style={{ resize: "none", fontFamily: "var(--font-family)" }} />
               </div>
 
+              {/* カタマった！ボタン */}
+              <div style={{ marginBottom: "1.5rem" }}>
+                <button onClick={handleUnstuckClick} disabled={isUnstuckLoading}
+                  className="btn btn-secondary"
+                  style={{ width: "100%", borderColor: "var(--accent)", color: "var(--accent-hover)", fontSize: "0.95rem" }}>
+                  {isUnstuckLoading ? "🤔 考え中..." : "😵 カタマった。助けて！"}
+                </button>
+                {unstuckResult && (
+                  <div className="unstuck-card fade-in">
+                    <p style={{ fontSize: "0.95rem", color: "var(--accent-hover)", fontWeight: "600", marginBottom: "1.25rem", lineHeight: "1.6" }}>
+                      💬 {unstuckResult.empathyMessage}
+                    </p>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                      {unstuckResult.options.map((opt, i) => (
+                        <div key={i} className="unstuck-option">
+                          <div style={{ fontSize: "0.9rem", fontWeight: "700", color: "var(--text-main)", marginBottom: "0.3rem" }}>
+                            {opt.emoji} {opt.label}
+                          </div>
+                          <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", lineHeight: "1.5" }}>
+                            {opt.description}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <button onClick={handleCompleteSubtask} className="btn btn-primary animate-pulse" style={{ width: "100%", padding: "1.1rem", fontSize: "1.1rem" }}>
                 🏆 この手順を完了して計画に戻る
               </button>
@@ -903,7 +1026,36 @@ FirstStep Keeper より温かい応援を込めて`;
           </div>
         )}
 
-        {/* ===== 7. 計画削除確認モーダル ===== */}
+        {/* ===== 7. 精力レベル選択モーダル ===== */}
+        {showEnergyModal && (
+          <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}>
+            <div className="card fade-in" style={{ maxWidth: "480px", width: "100%", padding: "2rem", boxShadow: "0 20px 48px rgba(0,0,0,0.15)" }}>
+              <h3 style={{ fontSize: "1.25rem", fontWeight: "700", marginBottom: "0.5rem", color: "var(--text-main)" }}>
+                🔋 今日の精力レベルは？
+              </h3>
+              <p style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: "1.75rem", lineHeight: "1.6" }}>
+                今のあなたの状態を教えてください。それに合わせて取り組みやすい手順を提案します。
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1rem" }}>
+                {ENERGY_OPTIONS.map(opt => (
+                  <button key={opt.level} onClick={() => handleEnergySelect(opt.level)}
+                    className="btn btn-secondary energy-modal-option">
+                    <span style={{ fontSize: "1.5rem" }}>{opt.emoji}</span>
+                    <span>
+                      <strong>{opt.label}</strong>
+                      <span style={{ fontSize: "0.85rem", fontWeight: "400", color: "var(--text-muted)", marginLeft: "0.5rem" }}>— {opt.description}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setShowEnergyModal(false)} className="btn btn-text" style={{ width: "100%", fontSize: "0.85rem" }}>
+                キャンセル
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ===== 8. 計画削除確認モーダル ===== */}
         {deleteConfirmTaskId && (
           <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}>
             <div className="card fade-in" style={{ maxWidth: "500px", width: "100%", padding: "2rem", boxShadow: "0 20px 48px rgba(0,0,0,0.15)" }}>
