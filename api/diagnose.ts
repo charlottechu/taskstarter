@@ -14,8 +14,14 @@ function extractJSON(text: string): string {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { task } = req.body as { task: string };
+  const { task, lang } = req.body as { task: string; lang?: string };
   if (!task) return res.status(400).json({ error: 'task is required' });
+
+  const langInstruction = lang === 'en'
+    ? '\n\nIMPORTANT: Write ALL values in the JSON entirely in English. Do not use Japanese.'
+    : lang === 'zh'
+    ? '\n\n重要：请将JSON中的所有内容完全用简体中文书写，不要使用日语。'
+    : '';
 
   const prompt = `あなたは先延ばし癖・注意力の問題を抱える人を支援するタスク分解アシスタントです。
 
@@ -39,6 +45,8 @@ recommendedModeの選び方:
 - "deep": レポート・研究・就活など複雑なプロジェクト系
 - "quick": 比較的シンプルなタスク
 - "recovery": 「再開」「久しぶり」「続き」などの文脈がある場合
+
+${langInstruction}
 
 questionsのルール:
 - 必ず最初の質問は「ユーザーが入力したタスクの具体的な中身を確認する」質問にすること。例：「『部屋の掃除』とのことですが、掃除・除菌・水回りの清掃ですか？それとも物の整理・断捨離ですか？」のように、曖昧な言葉を解像度高く確認する

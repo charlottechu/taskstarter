@@ -10,6 +10,7 @@ import {
   type SubtaskStatus,
 } from "./utils/mockGenerator";
 import { getDiagnosis, generateSubtasks, generateContextRecovery, getUnstuckHelp, type UnstuckResult } from "./utils/apiClient";
+import { getT, type Lang } from "./utils/i18n";
 
 type AppStep =
   | "landing"
@@ -20,22 +21,6 @@ type AppStep =
   | "work_mode";
 
 type EnergyLevel = "low" | "normal" | "high";
-
-const ENERGY_OPTIONS: Array<{ level: EnergyLevel; emoji: string; label: string; description: string }> = [
-  { level: "low", emoji: "😴", label: "低い", description: "今日はしんどい" },
-  { level: "normal", emoji: "😐", label: "普通", description: "いつも通り" },
-  { level: "high", emoji: "⚡", label: "高い", description: "やる気ある！" },
-];
-
-const STATUS_LABELS: Record<SubtaskStatus, string> = {
-  not_started: "未着手",
-  active: "進行中",
-  blocked: "ブロック中",
-  waiting: "待機中",
-  unclear: "やり方不明",
-  too_big: "細分化が必要",
-  completed: "完了",
-};
 
 const STATUS_COLORS: Record<SubtaskStatus, string> = {
   not_started: "#94a3b8",
@@ -52,13 +37,19 @@ const MENTAL_LOAD_COLORS: Record<string, string> = {
   medium: "#facc15",
   high: "#f87171",
 };
-const MENTAL_LOAD_LABELS: Record<string, string> = {
-  low: "負荷小",
-  medium: "負荷中",
-  high: "負荷大",
+
+const LANG_META: Record<Lang, { flag: string; label: string }> = {
+  ja: { flag: "🇯🇵", label: "日本語" },
+  en: { flag: "🇺🇸", label: "English" },
+  zh: { flag: "🇨🇳", label: "中文" },
 };
 
 export default function App() {
+  const [lang, setLang] = useState<Lang>(() => {
+    return (localStorage.getItem("firststep_lang") as Lang) || "ja";
+  });
+  const T = getT(lang);
+
   const [appStep, setAppStep] = useState<AppStep>("landing");
   const [savedTasks, setSavedTasks] = useState<ParentTask[]>([]);
   const [originalTask, setOriginalTask] = useState("");
@@ -82,6 +73,7 @@ export default function App() {
   const [pendingSubtaskId, setPendingSubtaskId] = useState<string | null>(null);
   const [unstuckResult, setUnstuckResult] = useState<UnstuckResult | null>(null);
   const [isUnstuckLoading, setIsUnstuckLoading] = useState(false);
+  const [showLangMenu, setShowLangMenu] = useState(false);
 
   useEffect(() => {
     try {
@@ -112,6 +104,12 @@ export default function App() {
     setUnstuckResult(null);
   }, [selectedParentTaskId]);
 
+  const handleLangChange = (l: Lang) => {
+    setLang(l);
+    localStorage.setItem("firststep_lang", l);
+    setShowLangMenu(false);
+  };
+
   const handleExampleChipClick = (exampleText: string) => {
     setOriginalTask(exampleText);
     document.getElementById("task-input")?.focus();
@@ -121,7 +119,7 @@ export default function App() {
     e.preventDefault();
     if (!originalTask.trim()) return;
     setIsLoading(true);
-    setLoadingMessage("タスクを診断中...");
+    setLoadingMessage(T.loading.diagnosis);
     try {
       const result = await getDiagnosis(originalTask);
       setDiagnosisResult(result);
@@ -131,7 +129,7 @@ export default function App() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('Diagnosis failed:', msg);
-      alert(`診断に失敗しました。\n\n${msg}`);
+      alert(T.alerts.diagnosisFailed + msg);
     } finally {
       setIsLoading(false);
       setLoadingMessage("");
@@ -145,7 +143,7 @@ export default function App() {
 
   const handleModeSelect = async (mode: SupportMode) => {
     setIsLoading(true);
-    setLoadingMessage("手順を生成中...");
+    setLoadingMessage(T.loading.subtasks);
     try {
       const generated = await generateSubtasks(originalTask, followUpAnswers, mode);
       setSelectedMode(mode);
@@ -153,7 +151,7 @@ export default function App() {
       setAppStep("editing");
     } catch (err) {
       console.error(err);
-      alert("手順の生成に失敗しました。もう一度お試しください。");
+      alert(T.alerts.subtasksFailed);
     } finally {
       setIsLoading(false);
       setLoadingMessage("");
@@ -193,16 +191,16 @@ export default function App() {
   const addBlankSubtask = () => {
     const newSub: Subtask = {
       id: "manual-" + Date.now().toString() + "-" + Math.random().toString(36).substr(2, 5),
-      title: "新しい手順（タイトルを編集してください）",
-      whyItMatters: "この手順を実行することで、タスクをより小さな要素から着実に進めることができます。",
-      goodEnoughScope: "最低限これが完了すれば十分です。",
+      title: T.editing.newTitle,
+      whyItMatters: T.editing.newWhy,
+      goodEnoughScope: T.editing.newScope,
       mentalLoad: "low",
       estimatedTime: "5〜10分",
-      concreteOutput: "手順を1つ完了した記録",
+      concreteOutput: T.editing.newOutput,
       status: "not_started",
       notes: "",
       interactiveSteps: [
-        { question: "この手順で最初にやることを1行で書いてください。", placeholder: "例：まず〇〇をする" }
+        { question: T.editing.newQuestion, placeholder: T.editing.newPlaceholder }
       ],
       interactiveAnswers: [],
     };
@@ -268,7 +266,6 @@ export default function App() {
     setAppStep("parent_detail");
   };
 
-
   const currentSubtask = currentParentTask?.subtasks.find(s => s.id === selectedSubtaskId) || null;
 
   const updateSubtaskField = (subtaskId: string, updates: Partial<Subtask>) => {
@@ -324,12 +321,13 @@ export default function App() {
         currentParentTask.title,
         currentSubtask.title,
         currentSubtask.whyItMatters,
-        currentSubtask.notes
+        currentSubtask.notes,
+        lang
       );
       setUnstuckResult(result);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      alert(`サポートの取得に失敗しました。\n${msg}`);
+      alert(T.alerts.unstuckFailed + msg);
     } finally {
       setIsUnstuckLoading(false);
     }
@@ -373,21 +371,23 @@ export default function App() {
 
   const handleCopyEntirePlan = () => {
     if (!currentParentTask) return;
-    const modeLabel = SUPPORT_MODES.find(m => m.id === currentParentTask.supportMode)?.label ?? currentParentTask.supportMode;
+    const modeKey = currentParentTask.supportMode as keyof typeof T.modes;
+    const modeLabel = T.modes[modeKey]?.label ?? currentParentTask.supportMode;
+    const modeEmoji = SUPPORT_MODES.find(m => m.id === currentParentTask.supportMode)?.emoji ?? "";
     const subtasksText = currentParentTask.subtasks
-      .map((s, idx) => `${idx + 1}. 【${STATUS_LABELS[s.status]}】 ${s.title}\n   └ 成果物: ${s.concreteOutput}\n   └ メモ: ${s.notes || "記述なし"}`)
+      .map((s, idx) => `${idx + 1}. 【${T.status[s.status]}】 ${s.title}\n${T.copyPlan.output}${s.concreteOutput}\n${T.copyPlan.notes}${s.notes || T.copyPlan.noNotes}`)
       .join("\n\n");
-    const textToCopy = `【FirstStep Keeper 計画書】
-■ 親タスク: ${currentParentTask.title}
-■ AI診断: ${currentParentTask.diagnosis}
-■ モード: ${modeLabel}
-■ 作成日時: ${currentParentTask.createdAt}
-■ 進捗度: ${getProgressPercentage(currentParentTask)}%
+    const textToCopy = `${T.copyPlan.header}
+${T.copyPlan.parentTask}${currentParentTask.title}
+${T.copyPlan.aiDiagnosis}${currentParentTask.diagnosis}
+${T.copyPlan.mode}${modeEmoji} ${modeLabel}
+${T.copyPlan.createdAt}${currentParentTask.createdAt}
+${T.copyPlan.progress}${getProgressPercentage(currentParentTask)}%
 
-■ 分解された手順リスト:
+${T.copyPlan.subtasksList}
 ${subtasksText}
 
-FirstStep Keeper より温かい応援を込めて`;
+${T.copyPlan.footer}`;
     navigator.clipboard.writeText(textToCopy).then(() => {
       setCopySuccess(true);
       setTimeout(() => setCopySuccess(false), 2000);
@@ -402,31 +402,32 @@ FirstStep Keeper より温かい応援を込めて`;
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
+  const currentEnergyOpt = T.energy.options.find((_, i) => (["low","normal","high"] as EnergyLevel[])[i] === energyLevel);
+
   return (
     <>
       <header>
-        <div className="app-logo" onClick={() => setAppStep("landing")} style={{ cursor: "pointer" }}>FirstStep Keeper</div>
-        <div className="app-subtitle">優しく伴走するタスク分解パートナー</div>
+        <div className="app-logo" onClick={() => setAppStep("landing")} style={{ cursor: "pointer" }}>{T.appTitle}</div>
+        <div className="app-subtitle">{T.appSubtitle}</div>
       </header>
 
       <main className="container" style={{ maxWidth: appStep === "landing" && savedTasks.length === 0 ? "720px" : "1080px" }}>
 
-        {/* ===== 1. ホーム画面 ===== */}
+        {/* ===== 1. Landing ===== */}
         {appStep === "landing" && (
           <div className="landing-layout fade-in" style={{ display: "flex", gap: "2rem", flexDirection: savedTasks.length > 0 ? "row" : "column", alignItems: "stretch" }}>
             <div className="landing-main card" style={{ flex: 1.2 }}>
-              <h2 style={{ marginBottom: "1.5rem" }}>🧠 新しいタスクを分解する</h2>
+              <h2 style={{ marginBottom: "1.5rem" }}>{T.landing.title}</h2>
               <p style={{ marginBottom: "2rem", fontSize: "0.95rem" }}>
-                タスクが巨大で圧倒されそうなとき、どこから手をつければいいか見えず動けないとき。<br />
-                あなたの頭の中を優しく整理し、心理的負担のない具体的なサブタスクへ分解します。
+                {T.landing.desc1}<br />{T.landing.desc2}
               </p>
 
               <div style={{ marginBottom: "1.5rem" }}>
                 <span style={{ fontSize: "0.8rem", fontWeight: "700", color: "var(--text-muted)", display: "block", marginBottom: "0.5rem" }}>
-                  💡 試してみる（クリックで入力されます）:
+                  {T.landing.exampleLabel}
                 </span>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                  {["ゼミの発表を準備したい", "就活の自己PRを書きたい", "研究計画を整理したい", "部屋を片付けたい", "レポートを書き始めたい"].map((example, i) => (
+                  {T.landing.examples.map((example, i) => (
                     <button key={i} type="button" onClick={() => handleExampleChipClick(example)} className="example-chip"
                       style={{ padding: "0.4rem 0.85rem", fontSize: "0.8rem", borderRadius: "9999px", border: "1px solid var(--primary-light)", backgroundColor: "var(--primary-light)", color: "var(--primary)", cursor: "pointer", fontWeight: "500", transition: "var(--transition-smooth)" }}>
                       {example}
@@ -437,11 +438,11 @@ FirstStep Keeper より温かい応援を込めて`;
 
               <form onSubmit={handleTaskSubmit} className="input-group">
                 <textarea id="task-input" className="input-field" rows={4}
-                  placeholder="例：ゼミの発表準備を始めたいけど、何からやればいいか分からない..."
+                  placeholder={T.landing.placeholder}
                   value={originalTask} onChange={(e) => setOriginalTask(e.target.value)}
                   style={{ resize: "none" }} required />
                 <button type="submit" className="btn btn-primary" style={{ marginTop: "1rem" }}>
-                  <span>✨</span> タスクの分解プロセスを始める
+                  <span>✨</span> {T.landing.submitBtn}
                 </button>
               </form>
             </div>
@@ -450,15 +451,16 @@ FirstStep Keeper より温かい応援を込めて`;
               <div className="landing-sidebar" style={{ flex: 1.1, display: "flex", flexDirection: "column", gap: "1.5rem" }}>
                 <div className="sidebar-card" style={{ height: "100%", maxHeight: "550px", display: "flex", flexDirection: "column" }}>
                   <h3 style={{ borderBottom: "2px solid var(--accent-light)", paddingBottom: "0.75rem", marginBottom: "1rem" }}>
-                    💼 マイ・ワークスペース
+                    {T.landing.workspaceTitle}
                   </h3>
                   <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "1rem" }}>
-                    これまでに分解した計画の一覧です。いつでも開いて作業を再開できます。
+                    {T.landing.workspaceDesc}
                   </p>
                   <div className="saved-task-list" style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "1rem", paddingRight: "0.25rem" }}>
                     {savedTasks.map((task) => {
                       const progress = getProgressPercentage(task);
                       const modeInfo = SUPPORT_MODES.find(m => m.id === task.supportMode);
+                      const modeLabel = T.modes[task.supportMode as keyof typeof T.modes]?.label;
                       return (
                         <div key={task.id} className="saved-task-card"
                           onClick={() => handleOpenParentTask(task.id)}
@@ -468,7 +470,7 @@ FirstStep Keeper より温かい応援を込めて`;
                           </h4>
                           {modeInfo && (
                             <span style={{ fontSize: "0.72rem", color: "var(--primary)", fontWeight: "600", display: "inline-block", marginBottom: "0.4rem" }}>
-                              {modeInfo.emoji} {modeInfo.label}
+                              {modeInfo.emoji} {modeLabel ?? modeInfo.label}
                             </span>
                           )}
                           <span style={{ fontSize: "0.75rem", color: "var(--text-light)", display: "block", marginBottom: "0.75rem" }}>
@@ -490,20 +492,20 @@ FirstStep Keeper より温かい応援を込めて`;
           </div>
         )}
 
-        {/* ===== 2. 診断＆深掘り質問画面 ===== */}
+        {/* ===== 2. Diagnosis ===== */}
         {appStep === "diagnosis" && diagnosisResult && (
           <div className="card fade-in">
             <h2 style={{ marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              🔍 パートナーによるタスク診断
+              {T.diagnosis.title}
             </h2>
             <p style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: "1.5rem" }}>
-              対象タスク：<strong style={{ color: "var(--text-main)" }}>「{originalTask}」</strong>
+              {T.diagnosis.targetPrefix}<strong style={{ color: "var(--text-main)" }}>「{originalTask}」</strong>
             </p>
 
             {diagnosisResult.isTooBig && (
               <div style={{ padding: "1.25rem 1.5rem", backgroundColor: "var(--accent-light)", borderLeft: "6px solid var(--accent)", borderRadius: "1.25rem", marginBottom: "1.5rem" }}>
                 <h3 style={{ fontSize: "0.95rem", fontWeight: "700", color: "var(--accent-hover)", marginBottom: "0.4rem" }}>
-                  ⚠️ このタスクはまだ広すぎるかもしれません
+                  {T.diagnosis.tooBigTitle}
                 </h3>
                 <p style={{ fontSize: "0.9rem", color: "var(--text-main)", lineHeight: "1.6", whiteSpace: "pre-line" }}>
                   {diagnosisResult.tooBigNarrowingPrompt}
@@ -513,7 +515,7 @@ FirstStep Keeper より温かい応援を込めて`;
 
             <div className="diagnosis-box" style={{ padding: "1.5rem 1.75rem", backgroundColor: "var(--primary-light)", borderLeft: "6px solid var(--primary)", borderRadius: "1.25rem", marginBottom: "1.25rem" }}>
               <h3 style={{ fontSize: "1rem", fontWeight: "700", color: "var(--primary-hover)", marginBottom: "0.5rem" }}>
-                ⚡ なぜこのタスクが難しく感じるのか？
+                {T.diagnosis.whyHardTitle}
               </h3>
               <p style={{ fontSize: "1.05rem", color: "var(--text-main)", lineHeight: "1.6" }}>
                 {diagnosisResult.taskDiagnosis}
@@ -522,7 +524,7 @@ FirstStep Keeper より温かい応援を込めて`;
 
             <div style={{ padding: "1.25rem 1.5rem", backgroundColor: "#fff8f0", borderLeft: "4px solid var(--accent)", borderRadius: "1rem", marginBottom: "1.5rem" }}>
               <h3 style={{ fontSize: "0.9rem", fontWeight: "700", color: "var(--accent-hover)", marginBottom: "0.35rem" }}>
-                🧠 あなたの今の状態
+                {T.diagnosis.stateTitle}
               </h3>
               <p style={{ fontSize: "0.95rem", color: "var(--text-main)", lineHeight: "1.6" }}>
                 {diagnosisResult.userStateDiagnosis}
@@ -536,14 +538,14 @@ FirstStep Keeper より温かい応援を込めて`;
             <form onSubmit={handleDiagnosisAnswersSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
               <div style={{ padding: "1.5rem", border: "1.5px solid var(--border)", borderRadius: "1.5rem", backgroundColor: "#ffffff" }}>
                 <h3 style={{ fontSize: "1.1rem", fontWeight: "700", color: "var(--text-main)", marginBottom: "1.25rem" }}>
-                  💬 より解像度の高い計画を作るための質問
+                  {T.diagnosis.questionsTitle}
                 </h3>
                 <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
                   {diagnosisResult.questions.map((question, i) => (
                     <div key={i} className="input-group" style={{ gap: "0.5rem" }}>
                       <label className="input-label" style={{ fontSize: "0.95rem" }}>{question}</label>
                       <input type="text" className="input-field"
-                        placeholder="例：まだ明確に決まっていません / 10分程度です"
+                        placeholder={T.diagnosis.qPlaceholder}
                         value={followUpAnswers[i] || ""} onChange={(e) => handleAnswerChange(i, e.target.value)}
                         style={{ padding: "0.75rem 1rem", fontSize: "0.95rem" }} required />
                     </div>
@@ -553,34 +555,35 @@ FirstStep Keeper より温かい応援を込めて`;
 
               <div style={{ display: "flex", gap: "1rem", marginTop: "1rem" }}>
                 <button type="button" onClick={() => setAppStep("landing")} className="btn btn-secondary" style={{ flex: 1 }}>
-                  やり直す
+                  {T.diagnosis.backBtn}
                 </button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 2 }}>
-                  ✨ この回答でモードを選ぶ
+                  {T.diagnosis.nextBtn}
                 </button>
               </div>
             </form>
           </div>
         )}
 
-        {/* ===== 3. サポートモード選択画面 ===== */}
+        {/* ===== 3. Mode Select ===== */}
         {appStep === "mode_select" && diagnosisResult && (
           <div className="card fade-in">
-            <h2 style={{ marginBottom: "0.75rem" }}>🎯 今日のサポートモードを選ぶ</h2>
+            <h2 style={{ marginBottom: "0.75rem" }}>{T.modeSelect.title}</h2>
             <p style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: "0.75rem" }}>
-              AIが診断した結果、あなたには
+              {T.modeSelect.aiRecommendsPrefix}
               <strong style={{ color: "var(--primary)" }}>
                 {" "}{SUPPORT_MODES.find(m => m.id === diagnosisResult.recommendedMode)?.emoji}{" "}
-                {SUPPORT_MODES.find(m => m.id === diagnosisResult.recommendedMode)?.label}
+                {T.modes[diagnosisResult.recommendedMode as keyof typeof T.modes]?.label}
               </strong>
-              {" "}モードがおすすめです。もちろん自分で選んでも構いません。
+              {" "}{T.modeSelect.aiRecommendsSuffix}
             </p>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1rem", margin: "1.5rem 0" }}>
               {SUPPORT_MODES.map((mode) => {
                 const isRecommended = mode.id === diagnosisResult.recommendedMode;
+                const modeT = T.modes[mode.id as keyof typeof T.modes];
                 return (
-                  <button key={mode.id} onClick={() => handleModeSelect(mode.id)}
+                  <button key={mode.id} onClick={() => handleModeSelect(mode.id as SupportMode)}
                     style={{
                       padding: "1.5rem", borderRadius: "1.25rem", textAlign: "left", cursor: "pointer", transition: "var(--transition-smooth)",
                       border: isRecommended ? "2.5px solid var(--primary)" : "1.5px solid var(--border)",
@@ -590,30 +593,30 @@ FirstStep Keeper より温かい応援を込めて`;
                     }}>
                     {isRecommended && (
                       <span style={{ position: "absolute", top: "0.75rem", right: "0.75rem", fontSize: "0.7rem", fontWeight: "700", backgroundColor: "var(--primary)", color: "#fff", padding: "0.2rem 0.5rem", borderRadius: "9999px" }}>
-                        おすすめ
+                        {T.modeSelect.recommendedTag}
                       </span>
                     )}
                     <div style={{ fontSize: "1.75rem", marginBottom: "0.5rem" }}>{mode.emoji}</div>
-                    <div style={{ fontSize: "1rem", fontWeight: "700", color: "var(--text-main)", marginBottom: "0.5rem" }}>{mode.label}</div>
-                    <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", lineHeight: "1.5", marginBottom: "0.75rem" }}>{mode.description}</div>
-                    <div style={{ fontSize: "0.78rem", fontWeight: "600", color: "var(--primary)" }}>📋 {mode.subtaskCount}</div>
+                    <div style={{ fontSize: "1rem", fontWeight: "700", color: "var(--text-main)", marginBottom: "0.5rem" }}>{modeT?.label ?? mode.label}</div>
+                    <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", lineHeight: "1.5", marginBottom: "0.75rem" }}>{modeT?.description ?? mode.description}</div>
+                    <div style={{ fontSize: "0.78rem", fontWeight: "600", color: "var(--primary)" }}>📋 {modeT?.subtaskCount ?? mode.subtaskCount}</div>
                   </button>
                 );
               })}
             </div>
 
             <button onClick={() => setAppStep("diagnosis")} className="btn btn-secondary" style={{ width: "100%", marginTop: "0.5rem" }}>
-              質問に戻る
+              {T.modeSelect.backBtn}
             </button>
           </div>
         )}
 
-        {/* ===== 4. サブタスク承認・編集画面 ===== */}
+        {/* ===== 4. Editing ===== */}
         {appStep === "editing" && (
           <div className="card fade-in">
-            <h2 style={{ marginBottom: "0.5rem" }}>🛠️ 分解手順の確認と編集</h2>
+            <h2 style={{ marginBottom: "0.5rem" }}>{T.editing.title}</h2>
             <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "1.5rem" }}>
-              AIが自動生成した手順です。タイトルの編集、追加、削除、順序の並び替えができます。
+              {T.editing.desc}
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginBottom: "2rem" }}>
@@ -628,15 +631,15 @@ FirstStep Keeper より温かい応援を込めて`;
                       className="input-field" style={{ padding: "0.6rem 0.85rem", fontSize: "0.95rem", margin: 0, width: "100%" }} required />
                     <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.4rem", flexWrap: "wrap" }}>
                       <span style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem", borderRadius: "9999px", backgroundColor: MENTAL_LOAD_COLORS[sub.mentalLoad] + "33", color: "#555", fontWeight: "600" }}>
-                        {MENTAL_LOAD_LABELS[sub.mentalLoad]}
+                        {T.mentalLoad[sub.mentalLoad as keyof typeof T.mentalLoad]}
                       </span>
                       <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>⏱ {sub.estimatedTime}</span>
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: "0.35rem", flexShrink: 0 }}>
-                    <button type="button" onClick={() => moveSubtaskUp(index)} disabled={index === 0} className="btn-icon" style={{ padding: "0.4rem 0.6rem" }} title="上へ移動">▲</button>
-                    <button type="button" onClick={() => moveSubtaskDown(index)} disabled={index === editingSubtasks.length - 1} className="btn-icon" style={{ padding: "0.4rem 0.6rem" }} title="下へ移動">▼</button>
-                    <button type="button" onClick={() => deleteSubtask(index)} className="btn-icon" style={{ padding: "0.4rem 0.6rem", borderColor: "var(--accent)", color: "var(--accent-hover)" }} title="削除">🗑️</button>
+                    <button type="button" onClick={() => moveSubtaskUp(index)} disabled={index === 0} className="btn-icon" style={{ padding: "0.4rem 0.6rem" }}>▲</button>
+                    <button type="button" onClick={() => moveSubtaskDown(index)} disabled={index === editingSubtasks.length - 1} className="btn-icon" style={{ padding: "0.4rem 0.6rem" }}>▼</button>
+                    <button type="button" onClick={() => deleteSubtask(index)} className="btn-icon" style={{ padding: "0.4rem 0.6rem", borderColor: "var(--accent)", color: "var(--accent-hover)" }}>🗑️</button>
                   </div>
                 </div>
               ))}
@@ -644,42 +647,42 @@ FirstStep Keeper より温かい応援を込めて`;
 
             <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
               <button type="button" onClick={addBlankSubtask} className="btn btn-secondary" style={{ borderStyle: "dashed", width: "100%", padding: "0.85rem" }}>
-                ➕ 新しい手順を手動で追加する
+                {T.editing.addBtn}
               </button>
               <div style={{ display: "flex", gap: "1rem", marginTop: "1rem" }}>
                 <button onClick={() => setAppStep("mode_select")} className="btn btn-secondary" style={{ flex: 1 }}>
-                  モード選択に戻る
+                  {T.editing.backBtn}
                 </button>
                 <button onClick={handleApproveAndSave} className="btn btn-primary" style={{ flex: 2 }}>
-                  🚀 この計画を保存してワークスペースを開く
+                  {T.editing.saveBtn}
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* ===== 5. 親タスク詳細画面 ===== */}
+        {/* ===== 5. Parent Detail ===== */}
         {appStep === "parent_detail" && currentParentTask && (
           <div className="session-layout fade-in">
             <div className="session-main card">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem", gap: "1rem" }}>
                 <div>
                   <span style={{ fontSize: "0.8rem", color: "var(--text-light)", textTransform: "uppercase", fontWeight: "700" }}>
-                    📂 親タスク詳細ワークスペース
+                    {T.parentDetail.breadcrumb}
                   </span>
                   <h2 style={{ fontSize: "1.6rem", marginTop: "0.25rem", color: "var(--text-main)" }}>
                     {currentParentTask.title}
                   </h2>
                 </div>
                 <button onClick={handleCopyEntirePlan} className="btn btn-secondary" style={{ fontSize: "0.85rem", padding: "0.5rem 1rem", whiteSpace: "nowrap" }}>
-                  {copySuccess ? "✅ コピー完了！" : "📋 計画書をコピー"}
+                  {copySuccess ? T.parentDetail.copiedBtn : T.parentDetail.copyBtn}
                 </button>
               </div>
 
-              {/* 全体進捗 */}
+              {/* Progress */}
               <div style={{ background: "var(--bg-base)", padding: "1.25rem 1.5rem", borderRadius: "1.25rem", marginBottom: "1.5rem" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-                  <span style={{ fontSize: "0.9rem", fontWeight: "700", color: "var(--text-main)" }}>🎯 全体進捗</span>
+                  <span style={{ fontSize: "0.9rem", fontWeight: "700", color: "var(--text-main)" }}>{T.parentDetail.progressTitle}</span>
                   <span style={{ fontSize: "0.95rem", fontWeight: "800", color: "var(--primary)" }}>{getProgressPercentage(currentParentTask)}%</span>
                 </div>
                 <div style={{ height: "10px", backgroundColor: "#e2e8f0", borderRadius: "5px", overflow: "hidden" }}>
@@ -687,43 +690,46 @@ FirstStep Keeper より温かい応援を込めて`;
                 </div>
               </div>
 
-              {/* 精力レベルセレクター */}
+              {/* Energy selector */}
               <div className="energy-selector-bar">
-                <span className="energy-selector-label">🔋 今日の精力レベル</span>
+                <span className="energy-selector-label">{T.energy.selectorLabel}</span>
                 <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                  {ENERGY_OPTIONS.map(opt => (
-                    <button key={opt.level} onClick={() => setEnergyLevel(opt.level)}
-                      className={`energy-option-btn${energyLevel === opt.level ? " selected" : ""}`}>
-                      {opt.emoji} {opt.label}
-                    </button>
-                  ))}
+                  {T.energy.options.map((opt, i) => {
+                    const lvl = (["low","normal","high"] as EnergyLevel[])[i];
+                    return (
+                      <button key={lvl} onClick={() => setEnergyLevel(lvl)}
+                        className={`energy-option-btn${energyLevel === lvl ? " selected" : ""}`}>
+                        {opt.emoji} {opt.label}
+                      </button>
+                    );
+                  })}
                 </div>
                 {!energyLevel && (
                   <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontStyle: "italic" }}>
-                    ← 選ぶと最適な手順をハイライトします
+                    {T.energy.hintIdle}
                   </span>
                 )}
-                {energyLevel && energyLevel !== "normal" && (
+                {energyLevel && energyLevel !== "normal" && currentEnergyOpt && (
                   <span style={{ fontSize: "0.78rem", color: "var(--primary)", fontWeight: "600" }}>
-                    {ENERGY_OPTIONS.find(o => o.level === energyLevel)?.description}に合った手順を提案中
+                    {T.energy.hintActivePrefix}{currentEnergyOpt.description}{T.energy.hintActiveSuffix}
                   </span>
                 )}
               </div>
 
-              {/* コンテキスト復元カード */}
+              {/* Context recovery */}
               {currentParentTask.contextRecovery && (
                 <div style={{ padding: "1.25rem 1.5rem", backgroundColor: "#f0f7ff", borderLeft: "4px solid #3b82f6", borderRadius: "1rem", marginBottom: "1.5rem" }}>
                   <h3 style={{ fontSize: "0.9rem", fontWeight: "700", color: "#1e40af", marginBottom: "0.75rem" }}>
-                    🔄 前回の作業の文脈を復元しました
+                    {T.parentDetail.contextTitle}
                   </h3>
                   <p style={{ fontSize: "0.85rem", color: "var(--text-main)", marginBottom: "0.4rem" }}>
-                    <strong>📍 どこまで進んでいたか：</strong> {currentParentTask.contextRecovery.whereStopped}
+                    <strong>{T.parentDetail.contextWhere}</strong> {currentParentTask.contextRecovery.whereStopped}
                   </p>
                   <p style={{ fontSize: "0.85rem", color: "var(--text-main)", marginBottom: "0.4rem" }}>
-                    <strong>✅ 明確になったこと：</strong> {currentParentTask.contextRecovery.whatClarified}
+                    <strong>{T.parentDetail.contextClarified}</strong> {currentParentTask.contextRecovery.whatClarified}
                   </p>
                   <p style={{ fontSize: "0.85rem", color: "var(--text-main)", marginBottom: "0.4rem" }}>
-                    <strong>❓ 迷っていたこと：</strong> {currentParentTask.contextRecovery.whatConfusing}
+                    <strong>{T.parentDetail.contextConfusing}</strong> {currentParentTask.contextRecovery.whatConfusing}
                   </p>
                   <p style={{ fontSize: "0.85rem", color: "#1e40af", fontWeight: "600" }}>
                     ➡️ {currentParentTask.contextRecovery.recommendedRestart}
@@ -731,20 +737,20 @@ FirstStep Keeper より温かい応援を込めて`;
                 </div>
               )}
 
-              {/* AI診断要約 */}
+              {/* AI diagnosis */}
               <div style={{ padding: "1.25rem", backgroundColor: "var(--primary-light)", borderRadius: "1rem", marginBottom: "2rem", borderLeft: "4px solid var(--primary)" }}>
                 <p style={{ fontSize: "0.9rem", color: "var(--text-main)", lineHeight: "1.5" }}>
-                  <strong>🤖 AIの作戦診断：</strong> {currentParentTask.diagnosis}
+                  <strong>{T.parentDetail.aiLabel}</strong> {currentParentTask.diagnosis}
                 </p>
               </div>
 
-              {/* サブタスク一覧 */}
+              {/* Subtask list */}
               <div>
                 <h3 style={{ fontSize: "1.1rem", fontWeight: "700", marginBottom: "0.5rem", color: "var(--text-main)" }}>
-                  🗺️ 分解された手順（クリックして集中作業モードを開始）
+                  {T.parentDetail.subtasksTitle}
                 </h3>
                 <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "1.25rem" }}>
-                  どこから始めても構いません。やりやすい手順を選択すると、その手順専用のタイマーと作業画面が開きます。
+                  {T.parentDetail.subtasksDesc}
                 </p>
                 <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                   {currentParentTask.subtasks.map((sub) => {
@@ -766,30 +772,30 @@ FirstStep Keeper より温かい応援を込めて`;
                             </span>
                             {isRecommended && (
                               <span style={{ fontSize: "0.72rem", padding: "0.2rem 0.6rem", borderRadius: "9999px", backgroundColor: "var(--accent)", color: "#fff", fontWeight: "700" }}>
-                                👉 今のあなたにおすすめ
+                                {T.energy.recommendedTag}
                               </span>
                             )}
                             <span style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem", borderRadius: "9999px", backgroundColor: STATUS_COLORS[sub.status] + "22", color: STATUS_COLORS[sub.status], fontWeight: "700", border: `1px solid ${STATUS_COLORS[sub.status]}44` }}>
-                              {STATUS_LABELS[sub.status]}
+                              {T.status[sub.status]}
                             </span>
                             <span style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem", borderRadius: "9999px", backgroundColor: MENTAL_LOAD_COLORS[sub.mentalLoad] + "33", color: "#555", fontWeight: "600" }}>
-                              {MENTAL_LOAD_LABELS[sub.mentalLoad]}
+                              {T.mentalLoad[sub.mentalLoad as keyof typeof T.mentalLoad]}
                             </span>
                             <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>⏱ {sub.estimatedTime}</span>
                           </div>
                           {!isCompleted && (
                             <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
                               <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", lineHeight: "1.4" }}>
-                                💡 <strong>なぜやるか：</strong> {sub.whyItMatters}
+                                <strong>{T.parentDetail.whyLabel}</strong> {sub.whyItMatters}
                               </p>
                               <p style={{ fontSize: "0.85rem", color: "var(--accent-hover)", fontWeight: "600", lineHeight: "1.4" }}>
-                                ✅ <strong>これで十分：</strong> {sub.goodEnoughScope}
+                                <strong>{T.parentDetail.goodEnoughLabel}</strong> {sub.goodEnoughScope}
                               </p>
                             </div>
                           )}
                           {isCompleted && (
                             <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
-                              🎉 この手順は完了しました。
+                              {T.parentDetail.completedMsg}
                             </p>
                           )}
                           {advice && (
@@ -799,7 +805,7 @@ FirstStep Keeper より温かい応援を込めて`;
                           )}
                           {sub.notes && (
                             <div style={{ marginTop: "0.5rem", padding: "0.5rem 0.75rem", backgroundColor: "rgba(255,255,255,0.7)", borderRadius: "6px", fontSize: "0.8rem", color: "var(--text-main)", fontStyle: "italic", border: "1px solid var(--border)" }}>
-                              ✏️ 保存されたメモあり ({sub.notes.length}文字)
+                              {T.parentDetail.notesPrefix}{sub.notes.length}{T.parentDetail.notesSuffix}
                             </div>
                           )}
                         </div>
@@ -810,21 +816,21 @@ FirstStep Keeper より温かい応援を込めて`;
               </div>
             </div>
 
-            {/* サイドバー */}
+            {/* Sidebar */}
             <div className="session-sidebar">
               <div className="sidebar-card" style={{ padding: "1.25rem" }}>
                 <button onClick={() => setAppStep("landing")} className="btn btn-secondary" style={{ width: "100%", fontSize: "0.9rem", padding: "0.75rem" }}>
-                  🏠 計画一覧（ホーム）に戻る
+                  {T.parentDetail.homeBtn}
                 </button>
                 <button onClick={() => setDeleteConfirmTaskId(currentParentTask.id)} className="btn btn-text" style={{ width: "100%", color: "var(--accent-hover)", marginTop: "0.5rem", fontSize: "0.85rem" }}>
-                  🗑️ この計画を削除する
+                  {T.parentDetail.deleteBtn}
                 </button>
               </div>
 
               <div className="parking-lot-section" style={{ marginTop: "0" }}>
-                <div className="parking-title"><span>🚗</span> Parking Lot (気が散り避難所)</div>
+                <div className="parking-title"><span>🚗</span> {T.parkingLot.title}</div>
                 <p className="parking-subtitle" style={{ marginBottom: "1rem" }}>
-                  このタスクの進行中に一時退避した雑念のリストです。
+                  {T.parkingLot.subtitleDetail}
                 </p>
                 {(currentParentTask.parkingThoughts || []).length > 0 ? (
                   <div className="parking-list" style={{ maxHeight: "250px" }}>
@@ -837,7 +843,7 @@ FirstStep Keeper より温かい応援を込めて`;
                   </div>
                 ) : (
                   <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontStyle: "italic", textAlign: "center", padding: "1rem 0" }}>
-                    退避した雑念はありません。
+                    {T.parkingLot.empty}
                   </p>
                 )}
               </div>
@@ -845,22 +851,22 @@ FirstStep Keeper より温かい応援を込めて`;
           </div>
         )}
 
-        {/* ===== 6. サブタスク個別作業モード ===== */}
+        {/* ===== 6. Work Mode ===== */}
         {appStep === "work_mode" && currentParentTask && currentSubtask && (
           <div className="session-layout fade-in">
             <div className="session-main card">
               <button onClick={() => { setAppStep("parent_detail"); setSelectedSubtaskId(null); setIsTimerRunning(false); }}
                 className="btn btn-secondary" style={{ padding: "0.5rem 1rem", fontSize: "0.85rem", marginBottom: "1.5rem" }}>
-                ⬅️ 計画ワークスペースに戻る
+                {T.workMode.backBtn}
               </button>
 
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem", flexWrap: "wrap" }}>
                   <span style={{ fontSize: "0.8rem", color: "var(--accent)", textTransform: "uppercase", fontWeight: "700" }}>
-                    🔥 個別手順フォーカス空間
+                    {T.workMode.breadcrumb}
                   </span>
                   <span style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem", borderRadius: "9999px", backgroundColor: MENTAL_LOAD_COLORS[currentSubtask.mentalLoad] + "33", color: "#555", fontWeight: "600" }}>
-                    {MENTAL_LOAD_LABELS[currentSubtask.mentalLoad]}
+                    {T.mentalLoad[currentSubtask.mentalLoad as keyof typeof T.mentalLoad]}
                   </span>
                   <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>⏱ {currentSubtask.estimatedTime}</span>
                 </div>
@@ -869,31 +875,29 @@ FirstStep Keeper より温かい応援を込めて`;
                 </h2>
               </div>
 
-              {/* なぜ重要か */}
               <div style={{ padding: "1.15rem", backgroundColor: "var(--primary-light)", borderRadius: "1rem", marginBottom: "1.25rem", borderLeft: "4px solid var(--primary)" }}>
                 <span style={{ fontSize: "0.75rem", fontWeight: "700", color: "var(--primary)", display: "block", marginBottom: "0.25rem" }}>
-                  💡 なぜこの手順が必要か？
+                  {T.workMode.whyTitle}
                 </span>
                 <p style={{ fontSize: "0.95rem", color: "var(--text-main)", lineHeight: "1.5" }}>{currentSubtask.whyItMatters}</p>
               </div>
 
-              {/* Good Enough スコープ と 成果物 */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
                 <div style={{ padding: "1rem", backgroundColor: "var(--accent-light)", borderRadius: "1rem", borderLeft: "3px solid var(--accent)" }}>
                   <span style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--accent-hover)", display: "block", marginBottom: "0.25rem" }}>
-                    ✅ これで十分（Good Enough）
+                    {T.workMode.goodEnoughTitle}
                   </span>
                   <p style={{ fontSize: "0.88rem", color: "var(--text-main)", lineHeight: "1.4" }}>{currentSubtask.goodEnoughScope}</p>
                 </div>
                 <div style={{ padding: "1rem", backgroundColor: "#f0f7ff", borderRadius: "1rem", borderLeft: "3px solid #3b82f6" }}>
                   <span style={{ fontSize: "0.72rem", fontWeight: "700", color: "#1e40af", display: "block", marginBottom: "0.25rem" }}>
-                    📦 目標の成果物
+                    {T.workMode.outputTitle}
                   </span>
                   <p style={{ fontSize: "0.88rem", color: "var(--text-main)", lineHeight: "1.4" }}>{currentSubtask.concreteOutput}</p>
                 </div>
               </div>
 
-              {/* ミニタイマー */}
+              {/* Timer */}
               <div className="session-timer-mini" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "1.5rem", background: "var(--bg-base)", padding: "1rem 2rem", borderRadius: "1.5rem", marginBottom: "2rem" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                   <span style={{ fontSize: "1.4rem" }}>⏱️</span>
@@ -901,25 +905,25 @@ FirstStep Keeper より温かい応援を込めて`;
                 </div>
                 <div style={{ display: "flex", gap: "0.75rem" }}>
                   <button onClick={toggleTimer} className="btn btn-primary" style={{ padding: "0.5rem 1.25rem", fontSize: "0.9rem", borderRadius: "0.75rem" }}>
-                    {isTimerRunning ? "⏸️ 一時停止" : "▶️ スタート"}
+                    {isTimerRunning ? T.workMode.timerPause : T.workMode.timerStart}
                   </button>
                   <button onClick={resetTimer} className="btn btn-secondary" style={{ padding: "0.5rem 1.25rem", fontSize: "0.9rem", borderRadius: "0.75rem" }}>
-                    🔄 リセット
+                    {T.workMode.timerReset}
                   </button>
                 </div>
               </div>
 
               {timeLeft === 0 && (
                 <div className="encouraging-card" style={{ backgroundColor: "var(--primary-light)", color: "var(--primary-hover)", borderLeftColor: "var(--primary)", marginBottom: "1.5rem" }}>
-                  🎉 素晴らしい！5分間向き合えました。自分のペースでメモを完成させ、完了ボタンを押してくださいね。
+                  {T.workMode.timerComplete}
                 </div>
               )}
 
-              {/* インタラクティブステップ（ガイド付き質問） */}
+              {/* Interactive guide */}
               {currentSubtask.interactiveSteps.length > 0 && (
                 <div style={{ marginBottom: "2rem" }}>
                   <h3 style={{ fontSize: "1rem", fontWeight: "700", marginBottom: "0.75rem", color: "var(--text-main)" }}>
-                    🗣️ 手順ガイド（記入することで思考が整理されます）
+                    {T.workMode.guideTitle}
                   </h3>
                   <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                     {currentSubtask.interactiveSteps.map((step, idx) => (
@@ -938,24 +942,24 @@ FirstStep Keeper より温かい応援を込めて`;
                 </div>
               )}
 
-              {/* メモ帳エリア */}
+              {/* Notes */}
               <div className="input-group" style={{ marginBottom: "2.5rem" }}>
                 <label className="input-label" htmlFor="notes-area" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span>✏️ ワークスペース（メモ・思考の下書き）</span>
-                  <span style={{ fontSize: "0.75rem", color: "var(--primary)", fontWeight: "500" }}>✓ 自動保存されます</span>
+                  <span>{T.workMode.notesLabel}</span>
+                  <span style={{ fontSize: "0.75rem", color: "var(--primary)", fontWeight: "500" }}>{T.workMode.notesAutoSave}</span>
                 </label>
                 <textarea id="notes-area" className="input-field" rows={6}
-                  placeholder="ここに自由に考えやアウトライン、メモを書き殴ってください。入力内容は自動的に保存されます。"
+                  placeholder={T.workMode.notesPlaceholder}
                   value={currentSubtask.notes} onChange={(e) => handleNotesChange(e.target.value)}
                   style={{ resize: "none", fontFamily: "var(--font-family)" }} />
               </div>
 
-              {/* カタマった！ボタン */}
+              {/* Unstuck */}
               <div style={{ marginBottom: "1.5rem" }}>
                 <button onClick={handleUnstuckClick} disabled={isUnstuckLoading}
                   className="btn btn-secondary"
                   style={{ width: "100%", borderColor: "var(--accent)", color: "var(--accent-hover)", fontSize: "0.95rem" }}>
-                  {isUnstuckLoading ? "🤔 考え中..." : "😵 カタマった。助けて！"}
+                  {isUnstuckLoading ? T.workMode.unstuckLoading : T.workMode.unstuckBtn}
                 </button>
                 {unstuckResult && (
                   <div className="unstuck-card fade-in">
@@ -979,36 +983,36 @@ FirstStep Keeper より温かい応援を込めて`;
               </div>
 
               <button onClick={handleCompleteSubtask} className="btn btn-primary animate-pulse" style={{ width: "100%", padding: "1.1rem", fontSize: "1.1rem" }}>
-                🏆 この手順を完了して計画に戻る
+                {T.workMode.completeBtn}
               </button>
             </div>
 
-            {/* サイドバー */}
+            {/* Sidebar */}
             <div className="session-sidebar">
               <div className="sidebar-card" style={{ padding: "1.25rem" }}>
-                <h3>📁 親計画情報</h3>
+                <h3>{T.workMode.sidebarTitle}</h3>
                 <div className="sidebar-info-item">
-                  <span className="label">親タスク:</span>
+                  <span className="label">{T.workMode.sidebarParentLabel}</span>
                   <p>{currentParentTask.title}</p>
                 </div>
                 <div className="sidebar-info-item">
-                  <span className="label">進捗:</span>
+                  <span className="label">{T.workMode.sidebarProgressLabel}</span>
                   <p style={{ color: "var(--primary)", fontWeight: "700" }}>{getProgressPercentage(currentParentTask)}%</p>
                 </div>
               </div>
 
               <div className="parking-lot-section" style={{ marginTop: "0" }}>
-                <div className="parking-title"><span>🚗</span> Parking Lot (気が散り避難所)</div>
+                <div className="parking-title"><span>🚗</span> {T.parkingLot.title}</div>
                 <p className="parking-subtitle" style={{ marginBottom: "0.75rem" }}>
-                  セッション中、「今すぐやらなくていいこと」を思いついたらここに退避させてください。
+                  {T.parkingLot.subtitleWork}
                 </p>
                 <form onSubmit={handleAddParkingThought} style={{ display: "flex", gap: "0.5rem" }}>
                   <input type="text" className="input-field"
-                    placeholder="例: あ、別の用事を思い出した..."
+                    placeholder={T.parkingLot.placeholder}
                     value={currentThought} onChange={(e) => setCurrentThought(e.target.value)}
                     style={{ padding: "0.5rem 0.85rem", fontSize: "0.85rem", borderRadius: "0.75rem" }} />
                   <button type="submit" className="btn btn-accent" style={{ padding: "0.5rem 1rem", borderRadius: "0.75rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}>
-                    退避する
+                    {T.parkingLot.addBtn}
                   </button>
                 </form>
                 {(currentParentTask.parkingThoughts || []).length > 0 && (
@@ -1026,51 +1030,54 @@ FirstStep Keeper より温かい応援を込めて`;
           </div>
         )}
 
-        {/* ===== 7. 精力レベル選択モーダル ===== */}
+        {/* ===== 7. Energy Modal ===== */}
         {showEnergyModal && (
           <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}>
             <div className="card fade-in" style={{ maxWidth: "480px", width: "100%", padding: "2rem", boxShadow: "0 20px 48px rgba(0,0,0,0.15)" }}>
               <h3 style={{ fontSize: "1.25rem", fontWeight: "700", marginBottom: "0.5rem", color: "var(--text-main)" }}>
-                🔋 今日の精力レベルは？
+                {T.energy.modalTitle}
               </h3>
               <p style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: "1.75rem", lineHeight: "1.6" }}>
-                今のあなたの状態を教えてください。それに合わせて取り組みやすい手順を提案します。
+                {T.energy.modalDesc}
               </p>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1rem" }}>
-                {ENERGY_OPTIONS.map(opt => (
-                  <button key={opt.level} onClick={() => handleEnergySelect(opt.level)}
-                    className="btn btn-secondary energy-modal-option">
-                    <span style={{ fontSize: "1.5rem" }}>{opt.emoji}</span>
-                    <span>
-                      <strong>{opt.label}</strong>
-                      <span style={{ fontSize: "0.85rem", fontWeight: "400", color: "var(--text-muted)", marginLeft: "0.5rem" }}>— {opt.description}</span>
-                    </span>
-                  </button>
-                ))}
+                {T.energy.options.map((opt, i) => {
+                  const lvl = (["low","normal","high"] as EnergyLevel[])[i];
+                  return (
+                    <button key={lvl} onClick={() => handleEnergySelect(lvl)}
+                      className="btn btn-secondary energy-modal-option">
+                      <span style={{ fontSize: "1.5rem" }}>{opt.emoji}</span>
+                      <span>
+                        <strong>{opt.label}</strong>
+                        <span style={{ fontSize: "0.85rem", fontWeight: "400", color: "var(--text-muted)", marginLeft: "0.5rem" }}>— {opt.description}</span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
               <button onClick={() => setShowEnergyModal(false)} className="btn btn-text" style={{ width: "100%", fontSize: "0.85rem" }}>
-                キャンセル
+                {T.energy.modalCancel}
               </button>
             </div>
           </div>
         )}
 
-        {/* ===== 8. 計画削除確認モーダル ===== */}
+        {/* ===== 8. Delete Modal ===== */}
         {deleteConfirmTaskId && (
           <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}>
             <div className="card fade-in" style={{ maxWidth: "500px", width: "100%", padding: "2rem", boxShadow: "0 20px 48px rgba(0,0,0,0.15)" }}>
               <h3 style={{ fontSize: "1.25rem", fontWeight: "700", marginBottom: "1rem", color: "var(--accent-hover)" }}>
-                🗑️ 計画を削除しますか？
+                {T.deleteModal.title}
               </h3>
               <p style={{ fontSize: "0.95rem", color: "var(--text-main)", marginBottom: "1.5rem", lineHeight: "1.6" }}>
-                このタスク計画および関連するすべての手順の進捗、メモ、Parking Lot のデータが完全に消去されます。元に戻すことはできません。
+                {T.deleteModal.desc}
               </p>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                 <button onClick={() => handleDeleteParentTask(deleteConfirmTaskId)} className="btn btn-accent" style={{ padding: "0.85rem" }}>
-                  はい、計画を完全に削除します
+                  {T.deleteModal.confirmBtn}
                 </button>
                 <button onClick={() => setDeleteConfirmTaskId(null)} className="btn btn-secondary" style={{ padding: "0.85rem" }}>
-                  いいえ、削除しません
+                  {T.deleteModal.cancelBtn}
                 </button>
               </div>
             </div>
@@ -1079,8 +1086,27 @@ FirstStep Keeper より温かい応援を込めて`;
       </main>
 
       <footer>
-        &copy; {new Date().getFullYear()} FirstStep Keeper. 温かく自分のペースで歩みを進めましょう。
+        &copy; {new Date().getFullYear()} {T.appTitle}. {T.footer}
       </footer>
+
+      {/* Language selector (bottom right) */}
+      <div className="lang-selector">
+        <button className="lang-trigger" onClick={() => setShowLangMenu(v => !v)} aria-label="Select language">
+          <span>{LANG_META[lang].flag}</span>
+          <span className="lang-trigger-label">{LANG_META[lang].label}</span>
+        </button>
+        {showLangMenu && (
+          <div className="lang-menu">
+            {(Object.keys(LANG_META) as Lang[]).map(l => (
+              <button key={l} onClick={() => handleLangChange(l)}
+                className={`lang-menu-item${lang === l ? " active" : ""}`}>
+                <span>{LANG_META[l].flag}</span>
+                <span>{LANG_META[l].label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {isLoading && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(255,255,255,0.85)", backdropFilter: "blur(4px)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 2000 }}>

@@ -34,12 +34,13 @@ export async function getUnstuckHelp(
   parentTitle: string,
   subtaskTitle: string,
   whyItMatters: string,
-  notes: string
+  notes: string,
+  lang?: string
 ): Promise<UnstuckResult> {
   const res = await fetch('/api/unstuck', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ parentTitle, subtaskTitle, whyItMatters, notes }),
+    body: JSON.stringify({ parentTitle, subtaskTitle, whyItMatters, notes, lang }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));

@@ -21,8 +21,14 @@ const MODE_DESCRIPTIONS: Record<string, string> = {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { task, answers, mode } = req.body as { task: string; answers: string[]; mode: string };
+  const { task, answers, mode, lang } = req.body as { task: string; answers: string[]; mode: string; lang?: string };
   if (!task || !mode) return res.status(400).json({ error: 'task and mode are required' });
+
+  const langInstruction = lang === 'en'
+    ? '\n\nIMPORTANT: Write ALL values in the JSON array entirely in English. Do not use Japanese.'
+    : lang === 'zh'
+    ? '\n\n重要：请将JSON数组中的所有内容完全用简体中文书写，不要使用日语。'
+    : '';
 
   const answersText = (answers || []).map((a, i) => `回答${i + 1}: ${a}`).join('\n');
 
@@ -73,7 +79,7 @@ ${answersText || '（なし）'}
 - recoveryモード: 3〜4手順、最初の手順は必ず現状確認から
 - mentalLoadは "low" | "medium" | "high" のいずれか
 - interactiveStepsは各手順に1〜2個
-- 温かく、ユーザーを責めないトーン`;
+- 温かく、ユーザーを責めないトーン${langInstruction}`;
 
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });

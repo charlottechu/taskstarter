@@ -14,13 +14,20 @@ function extractJSON(text: string): string {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { parentTitle, subtaskTitle, whyItMatters, notes } = req.body as {
+  const { parentTitle, subtaskTitle, whyItMatters, notes, lang } = req.body as {
     parentTitle: string;
     subtaskTitle: string;
     whyItMatters: string;
     notes: string;
+    lang?: string;
   };
   if (!parentTitle || !subtaskTitle) return res.status(400).json({ error: 'parentTitle and subtaskTitle are required' });
+
+  const langInstruction = lang === 'en'
+    ? '\n\nIMPORTANT: Write ALL values in the JSON entirely in English. Do not use Japanese.'
+    : lang === 'zh'
+    ? '\n\n重要：请将JSON中的所有内容完全用简体中文书写，不要使用日语。'
+    : '';
 
   const prompt = `あなたは先延ばし癖・注意力の問題を抱える人を優しく支援するタスクコーチです。
 
@@ -53,7 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   ]
 }
 
-全ての文字列は日本語。温かく非批判的なトーンで。`;
+全ての文字列は日本語。温かく非批判的なトーンで。${langInstruction}`;
 
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
