@@ -152,12 +152,12 @@ const ja: Translations = {
   status: { not_started: '未着手', active: '進行中', blocked: 'ブロック中', waiting: '待機中', unclear: 'やり方不明', too_big: '細分化が必要', completed: '完了' },
   mentalLoad: { low: '負荷小', medium: '負荷中', high: '負荷大' },
   energy: {
-    selectorLabel: '🔋 今日の精力レベル',
+    selectorLabel: '🔋 今日の元気レベル',
     hintIdle: '← 選ぶと最適な手順をハイライトします',
     hintActivePrefix: '',
     hintActiveSuffix: 'に合った手順を提案中',
     recommendedTag: '👉 今のあなたにおすすめ',
-    modalTitle: '🔋 今日の精力レベルは？',
+    modalTitle: '🔋 今日の元気レベルは？',
     modalDesc: '今のあなたの状態を教えてください。それに合わせて取り組みやすい手順を提案します。',
     modalCancel: 'キャンセル',
     options: [
