@@ -143,6 +143,31 @@ export interface Translations {
     subtasksFailed: string;
     unstuckFailed: string;
   };
+  progress: {
+    viewBtn: string;
+    modalTitle: string;
+    closeBtn: string;
+    penguinLabel: string;
+    stages: { egg: string; chick: string; explorer: string; adventure: string; wise: string };
+    nextIn: string;
+    maxStage: string;
+    collectionTitle: string;
+    tokensLabel: string;
+    seedsLabel: string;
+    starsLabel: string;
+    calendarTitle: string;
+    calendarLegend: string;
+    insightsTitle: string;
+    insightSessions: string;
+    insightReturns: string;
+    insightCompleted: string;
+    insightDefault: string;
+    dailyTitle: string;
+    recoveryTitle: string;
+    recoveryBody: string;
+    recoveryReward: string;
+    recoveryCta: string;
+  };
 }
 
 const ja: Translations = {
@@ -287,6 +312,31 @@ const ja: Translations = {
     diagnosisFailed: '診断に失敗しました。\n\n',
     subtasksFailed: '手順の生成に失敗しました。もう一度お試しください。',
     unstuckFailed: 'サポートの取得に失敗しました。\n',
+  },
+  progress: {
+    viewBtn: '🐧 成長記録',
+    modalTitle: '🐧 やさしい成長記録',
+    closeBtn: '閉じる',
+    penguinLabel: '相棒のペンギン',
+    stages: { egg: '🥚 タマゴ', chick: '🐤 ちびペンギン', explorer: '🐧 探検ペンギン', adventure: '🏔️ 冒険ペンギン', wise: '✨ 賢者ペンギン' },
+    nextIn: 'あと{n}🐣で成長します',
+    maxStage: '最高の状態に到達しました ✨',
+    collectionTitle: 'コレクション',
+    tokensLabel: '🐣 最初の一歩トークン',
+    seedsLabel: '🌱 回復の種',
+    starsLabel: '⭐ 達成マイルストーン',
+    calendarTitle: '🌿 28日間の活動記録',
+    calendarLegend: '🐣 開始  🐤 小目標  ⭐ 大目標  🌱 復帰  💬 集中',
+    insightsTitle: '💬 あなたの活動',
+    insightSessions: '今週{n}回、作業セッションを開始しました。',
+    insightReturns: '今週{n}回、中断していたタスクに戻れました。それは勇気です。',
+    insightCompleted: 'これまでに{n}個のタスクを完走しました。',
+    insightDefault: '小さな一歩を積み重ねています。今日も十分です。',
+    dailyTitle: '今日の活動',
+    recoveryTitle: 'おかえり。',
+    recoveryBody: '{days}日ぶりに戻ってきてくれました。\nまた来てくれてありがとう。',
+    recoveryReward: '🌱 回復の種 +1',
+    recoveryCta: 'ありがとう、始めます',
   },
 };
 
@@ -433,6 +483,31 @@ const en: Translations = {
     subtasksFailed: 'Failed to generate steps. Please try again.',
     unstuckFailed: 'Failed to get support.\n',
   },
+  progress: {
+    viewBtn: '🐧 Progress',
+    modalTitle: '🐧 Gentle Progress Log',
+    closeBtn: 'Close',
+    penguinLabel: 'Your Penguin Companion',
+    stages: { egg: '🥚 Egg', chick: '🐤 Little Penguin', explorer: '🐧 Explorer Penguin', adventure: '🏔️ Adventure Penguin', wise: '✨ Wise Penguin' },
+    nextIn: '{n} more 🐣 to evolve',
+    maxStage: 'Reached the highest stage ✨',
+    collectionTitle: 'Collection',
+    tokensLabel: '🐣 First Step Tokens',
+    seedsLabel: '🌱 Recovery Seeds',
+    starsLabel: '⭐ Milestones',
+    calendarTitle: '🌿 28-Day Activity Log',
+    calendarLegend: '🐣 Session  🐤 Subtask  ⭐ Task  🌱 Return  💬 Focus',
+    insightsTitle: '💬 Your Activity',
+    insightSessions: 'You started {n} work session(s) this week.',
+    insightReturns: 'You returned to paused tasks {n} time(s) this week. That takes courage.',
+    insightCompleted: 'You\'ve completed {n} task(s) in total.',
+    insightDefault: 'You\'re building momentum, one small step at a time.',
+    dailyTitle: "Today's Activity",
+    recoveryTitle: 'Welcome back.',
+    recoveryBody: 'You\'ve been away for {days} days.\nThank you for coming back.',
+    recoveryReward: '🌱 Recovery Seed +1',
+    recoveryCta: 'Thanks, let\'s begin',
+  },
 };
 
 const zh: Translations = {
@@ -577,6 +652,31 @@ const zh: Translations = {
     diagnosisFailed: '诊断失败。\n\n',
     subtasksFailed: '生成步骤失败，请重试。',
     unstuckFailed: '获取支持失败。\n',
+  },
+  progress: {
+    viewBtn: '🐧 成长记录',
+    modalTitle: '🐧 温柔的成长记录',
+    closeBtn: '关闭',
+    penguinLabel: '你的企鹅伙伴',
+    stages: { egg: '🥚 企鹅蛋', chick: '🐤 小企鹅', explorer: '🐧 探险企鹅', adventure: '🏔️ 冒险企鹅', wise: '✨ 智慧企鹅' },
+    nextIn: '再{n}个🐣就能成长',
+    maxStage: '已达到最高阶段 ✨',
+    collectionTitle: '收藏',
+    tokensLabel: '🐣 第一步代币',
+    seedsLabel: '🌱 回归之种',
+    starsLabel: '⭐ 里程碑',
+    calendarTitle: '🌿 28天活动记录',
+    calendarLegend: '🐣 专注  🐤 小目标  ⭐ 大目标  🌱 回归  💬 反思',
+    insightsTitle: '💬 你的活动',
+    insightSessions: '本周你开始了{n}次工作专注。',
+    insightReturns: '本周你{n}次回到了暂停的任务。这需要勇气。',
+    insightCompleted: '你总共完成了{n}个任务。',
+    insightDefault: '你在一步一步地积累前进的力量。',
+    dailyTitle: '今天的活动',
+    recoveryTitle: '欢迎回来。',
+    recoveryBody: '你已经离开了{days}天。\n谢谢你回来了。',
+    recoveryReward: '🌱 回归之种 +1',
+    recoveryCta: '谢谢，开始吧',
   },
 };
 

@@ -1,5 +1,19 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
+  type ProgressData,
+  type EarnEventType,
+  loadProgress,
+  saveProgress,
+  canGrantReturn,
+  getPenguinStage,
+  getCalendarDays,
+  getWeeklyStats,
+  todayISO,
+  daysBetween,
+  EARN_AMOUNTS,
+  appendActivity,
+} from "./utils/progress";
+import {
   getStatusAdvice,
   SUPPORT_MODES,
   type Subtask,
@@ -75,6 +89,15 @@ export default function App() {
   const [isUnstuckLoading, setIsUnstuckLoading] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
 
+  // Gentle Progress System
+  const [progressData, setProgressData] = useState<ProgressData>(() => loadProgress());
+  const [showProgressModal, setShowProgressModal] = useState(false);
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const [recoveryDaysAway, setRecoveryDaysAway] = useState(0);
+  const [tokenToast, setTokenToast] = useState<{ amount: number; text: string } | null>(null);
+  const [timerBonusGranted, setTimerBonusGranted] = useState(false);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     try {
       const stored = localStorage.getItem("firststep_tasks");
@@ -99,10 +122,56 @@ export default function App() {
     localStorage.setItem("firststep_tasks", JSON.stringify(tasks));
   };
 
+  const earnProgress = (type: EarnEventType, taskId?: string) => {
+    if (type === 'return' && taskId && !canGrantReturn(progressData, taskId)) return;
+    const amount = EARN_AMOUNTS[type];
+    const today = todayISO();
+    setProgressData(prev => {
+      const entry = { date: today, type, ...(taskId ? { taskId } : {}) };
+      const newData: ProgressData = {
+        ...appendActivity(prev, entry),
+        firstStepTokens: prev.firstStepTokens + amount,
+        milestoneStars: type === 'task_complete' ? prev.milestoneStars + 1 : prev.milestoneStars,
+      };
+      saveProgress(newData);
+      return newData;
+    });
+    const text = type === 'task_complete' ? `+${amount} 🐣 ⭐` : `+${amount} 🐣`;
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setTokenToast({ amount, text });
+    toastTimerRef.current = setTimeout(() => setTokenToast(null), 2500);
+  };
+
   useEffect(() => {
     setEnergyLevel(null);
     setUnstuckResult(null);
   }, [selectedParentTaskId]);
+
+  // Recovery check on first load
+  useEffect(() => {
+    const data = loadProgress();
+    const today = todayISO();
+    if (data.lastActiveDate && daysBetween(data.lastActiveDate, today) >= 5) {
+      const days = daysBetween(data.lastActiveDate, today);
+      setRecoveryDaysAway(days);
+      setShowRecoveryModal(true);
+      const updated = { ...data, recoverySeeds: data.recoverySeeds + 1, lastActiveDate: today };
+      saveProgress(updated);
+      setProgressData(updated);
+    } else if (!data.lastActiveDate || data.lastActiveDate !== today) {
+      const updated = { ...data, lastActiveDate: today };
+      saveProgress(updated);
+      setProgressData(updated);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Timer bonus — once per session when 5-min timer completes
+  useEffect(() => {
+    if (timeLeft === 0 && !timerBonusGranted && appStep === 'work_mode') {
+      setTimerBonusGranted(true);
+      earnProgress('reflection');
+    }
+  }, [timeLeft]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLangChange = (l: Lang) => {
     setLang(l);
@@ -224,6 +293,7 @@ export default function App() {
     };
     const updated = [newParentTask, ...savedTasks];
     saveTasksToStorage(updated);
+    earnProgress('plan_created', newParentTask.id);
     setSelectedParentTaskId(newParentTask.id);
     setAppStep("parent_detail");
     setOriginalTask("");
@@ -261,6 +331,8 @@ export default function App() {
     if (task) {
       const recovery = generateContextRecovery(task);
       saveTasksToStorage(savedTasks.map(t => t.id === taskId ? { ...t, contextRecovery: recovery } : t));
+      const hasProgress = task.subtasks.some(s => s.status === 'completed');
+      if (hasProgress) earnProgress('return', taskId);
     }
     setSelectedParentTaskId(taskId);
     setAppStep("parent_detail");
@@ -291,7 +363,9 @@ export default function App() {
     if (sub.status === "not_started") updateSubtaskField(subtaskId, { status: "active" });
     setTimeLeft(300);
     setIsTimerRunning(true);
+    setTimerBonusGranted(false);
     setUnstuckResult(null);
+    earnProgress('session_start', subtaskId);
     setAppStep("work_mode");
   };
 
@@ -362,9 +436,16 @@ export default function App() {
 
   const handleCompleteSubtask = () => {
     if (!currentParentTask || !selectedSubtaskId) return;
+    const willCompleteAll = currentParentTask.subtasks.every(
+      s => s.status === 'completed' || s.id === selectedSubtaskId
+    );
     updateSubtaskField(selectedSubtaskId, { status: "completed", interactiveAnswers });
     setIsTimerRunning(false);
     if (timerRef.current) clearInterval(timerRef.current);
+    earnProgress('subtask_complete', selectedSubtaskId);
+    if (willCompleteAll) {
+      setTimeout(() => earnProgress('task_complete', currentParentTask.id), 700);
+    }
     setAppStep("parent_detail");
     setSelectedSubtaskId(null);
   };
@@ -395,7 +476,7 @@ ${T.copyPlan.footer}`;
   };
 
   const toggleTimer = () => setIsTimerRunning(!isTimerRunning);
-  const resetTimer = () => { setIsTimerRunning(false); setTimeLeft(300); };
+  const resetTimer = () => { setIsTimerRunning(false); setTimeLeft(300); setTimerBonusGranted(false); };
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -449,7 +530,38 @@ ${T.copyPlan.footer}`;
 
             {savedTasks.length > 0 && (
               <div className="landing-sidebar" style={{ flex: 1.1, display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-                <div className="sidebar-card" style={{ height: "100%", maxHeight: "550px", display: "flex", flexDirection: "column" }}>
+
+                {/* Daily Progress Card */}
+                {(() => {
+                  const stage = getPenguinStage(progressData.firstStepTokens);
+                  const todayActivity = progressData.activityLog.filter(e => e.date === todayISO());
+                  const tokensToday = todayActivity.reduce((sum, e) => sum + EARN_AMOUNTS[e.type], 0);
+                  return (
+                    <div className="sidebar-card" style={{ padding: "1.25rem", cursor: "pointer" }} onClick={() => setShowProgressModal(true)}>
+                      <h3 style={{ borderBottom: "2px solid var(--primary-light)", paddingBottom: "0.5rem", marginBottom: "0.85rem" }}>
+                        {T.progress.dailyTitle}
+                      </h3>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+                        <span style={{ fontSize: "2.25rem", lineHeight: 1 }}>{stage.emoji}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: "700", color: "var(--primary)", fontSize: "0.95rem" }}>
+                            {T.progress.stages[stage.nameKey as keyof typeof T.progress.stages]}
+                          </div>
+                          <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
+                            {T.progress.tokensLabel}: {progressData.firstStepTokens}
+                          </div>
+                        </div>
+                        {tokensToday > 0 && (
+                          <span style={{ fontSize: "0.8rem", fontWeight: "700", color: "var(--accent-hover)", backgroundColor: "var(--accent-light)", padding: "0.25rem 0.65rem", borderRadius: "9999px" }}>
+                            +{tokensToday} 🐣
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="sidebar-card" style={{ flex: 1, maxHeight: "430px", display: "flex", flexDirection: "column" }}>
                   <h3 style={{ borderBottom: "2px solid var(--accent-light)", paddingBottom: "0.75rem", marginBottom: "1rem" }}>
                     {T.landing.workspaceTitle}
                   </h3>
@@ -1030,7 +1142,124 @@ ${T.copyPlan.footer}`;
           </div>
         )}
 
-        {/* ===== 7. Energy Modal ===== */}
+        {/* ===== 7. Recovery Modal ===== */}
+        {showRecoveryModal && (
+          <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.45)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, padding: "1rem" }}>
+            <div className="card fade-in" style={{ maxWidth: "420px", width: "100%", padding: "2.5rem", textAlign: "center", boxShadow: "0 24px 56px rgba(0,0,0,0.12)" }}>
+              <div style={{ fontSize: "3.5rem", marginBottom: "0.75rem", lineHeight: 1 }}>🌱</div>
+              <h3 style={{ fontSize: "1.5rem", fontWeight: "700", marginBottom: "1rem", color: "var(--text-main)" }}>
+                {T.progress.recoveryTitle}
+              </h3>
+              <p style={{ fontSize: "0.95rem", color: "var(--text-muted)", lineHeight: "1.75", whiteSpace: "pre-line", marginBottom: "1.5rem" }}>
+                {T.progress.recoveryBody.replace('{days}', String(recoveryDaysAway))}
+              </p>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0.6rem 1.25rem", backgroundColor: "var(--primary-light)", borderRadius: "9999px", fontSize: "1rem", fontWeight: "700", color: "var(--primary-hover)", marginBottom: "1.75rem" }}>
+                {T.progress.recoveryReward}
+              </div>
+              <button onClick={() => setShowRecoveryModal(false)} className="btn btn-primary" style={{ width: "100%", padding: "1rem" }}>
+                {T.progress.recoveryCta}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ===== 7b. Progress Modal ===== */}
+        {showProgressModal && (() => {
+          const stage = getPenguinStage(progressData.firstStepTokens);
+          const progressPct = stage.nextTokens
+            ? Math.round(((progressData.firstStepTokens - stage.minTokens) / (stage.nextTokens - stage.minTokens)) * 100)
+            : 100;
+          const calDays = getCalendarDays(progressData.activityLog);
+          const stats = getWeeklyStats(progressData.activityLog);
+          const insights: string[] = [];
+          if (stats.sessions > 0) insights.push(T.progress.insightSessions.replace('{n}', String(stats.sessions)));
+          if (stats.returns > 0) insights.push(T.progress.insightReturns.replace('{n}', String(stats.returns)));
+          if (stats.completedTasks > 0) insights.push(T.progress.insightCompleted.replace('{n}', String(stats.completedTasks)));
+          if (insights.length === 0) insights.push(T.progress.insightDefault);
+          return (
+            <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.45)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1050, padding: "1rem" }}>
+              <div className="card fade-in" style={{ maxWidth: "560px", width: "100%", padding: "2rem", maxHeight: "88vh", overflowY: "auto", boxShadow: "0 24px 56px rgba(0,0,0,0.14)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.75rem" }}>
+                  <h3 style={{ fontSize: "1.2rem", fontWeight: "700", color: "var(--text-main)" }}>{T.progress.modalTitle}</h3>
+                  <button onClick={() => setShowProgressModal(false)} className="btn btn-text" style={{ fontSize: "0.9rem" }}>{T.progress.closeBtn}</button>
+                </div>
+
+                {/* Penguin Stage */}
+                <div style={{ textAlign: "center", padding: "1.25rem", backgroundColor: "var(--bg-base)", borderRadius: "1.25rem", marginBottom: "1.25rem" }}>
+                  <div style={{ fontSize: "3.5rem", lineHeight: 1, marginBottom: "0.5rem" }}>{stage.emoji}</div>
+                  <div style={{ fontWeight: "700", fontSize: "1.05rem", color: "var(--primary-hover)", marginBottom: "0.75rem" }}>
+                    {T.progress.stages[stage.nameKey as keyof typeof T.progress.stages]}
+                  </div>
+                  <div className="penguin-progress-bar" style={{ margin: "0 auto", maxWidth: "240px" }}>
+                    <div className="penguin-progress-fill" style={{ width: `${progressPct}%` }} />
+                  </div>
+                  <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "0.5rem" }}>
+                    {stage.nextTokens ? T.progress.nextIn.replace('{n}', String(stage.nextTokens - progressData.firstStepTokens)) : T.progress.maxStage}
+                  </div>
+                </div>
+
+                {/* Collection */}
+                <div style={{ marginBottom: "1.25rem" }}>
+                  <h4 style={{ fontSize: "0.85rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "0.75rem" }}>{T.progress.collectionTitle}</h4>
+                  <div style={{ display: "flex", gap: "0.75rem" }}>
+                    {[
+                      { label: T.progress.tokensLabel, count: progressData.firstStepTokens },
+                      { label: T.progress.seedsLabel, count: progressData.recoverySeeds },
+                      { label: T.progress.starsLabel, count: progressData.milestoneStars },
+                    ].map(({ label, count }) => (
+                      <div key={label} className="collection-stat">
+                        <span style={{ fontSize: "1.35rem", lineHeight: 1 }}>{label.split(' ')[0]}</span>
+                        <span style={{ fontSize: "1.25rem", fontWeight: "800", color: "var(--primary)" }}>{count}</span>
+                        <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textAlign: "center", lineHeight: 1.3 }}>{label.split(' ').slice(1).join(' ')}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 28-day Calendar */}
+                <div style={{ marginBottom: "1.25rem" }}>
+                  <h4 style={{ fontSize: "0.85rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "0.75rem" }}>{T.progress.calendarTitle}</h4>
+                  <div className="activity-calendar">
+                    {calDays.map((day, i) => {
+                      const hasAct = day.types.size > 0;
+                      const icons: string[] = [];
+                      if (day.types.has('task_complete')) icons.push('⭐');
+                      else if (day.types.has('subtask_complete')) icons.push('🐤');
+                      if ((day.types.has('session_start') || day.types.has('plan_created')) && icons.length < 2) icons.push('🐣');
+                      if (day.types.has('return') && icons.length < 2) icons.push('🌱');
+                      if (day.types.has('reflection') && icons.length < 2) icons.push('💬');
+                      return (
+                        <div key={i} className={`calendar-cell ${hasAct ? 'calendar-cell-active' : 'calendar-cell-empty'}`}>
+                          <span style={{ fontSize: "0.6rem", color: hasAct ? "var(--primary)" : "var(--text-light)", fontWeight: hasAct ? "700" : "400" }}>
+                            {day.dayNum}
+                          </span>
+                          {hasAct && icons.length > 0 && (
+                            <span style={{ fontSize: "0.7rem", lineHeight: 1 }}>{icons.slice(0, 2).join('')}</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "0.5rem" }}>{T.progress.calendarLegend}</p>
+                </div>
+
+                {/* Insights */}
+                <div>
+                  <h4 style={{ fontSize: "0.85rem", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "0.75rem" }}>{T.progress.insightsTitle}</h4>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    {insights.map((msg, i) => (
+                      <p key={i} style={{ fontSize: "0.9rem", color: "var(--text-main)", lineHeight: "1.6", padding: "0.6rem 0.85rem", backgroundColor: "var(--primary-light)", borderRadius: "0.75rem", borderLeft: "3px solid var(--primary)" }}>
+                        {msg}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ===== 8. Energy Modal ===== */}
         {showEnergyModal && (
           <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}>
             <div className="card fade-in" style={{ maxWidth: "480px", width: "100%", padding: "2rem", boxShadow: "0 20px 48px rgba(0,0,0,0.15)" }}>
@@ -1088,6 +1317,19 @@ ${T.copyPlan.footer}`;
       <footer>
         &copy; {new Date().getFullYear()} {T.appTitle}. {T.footer}
       </footer>
+
+      {/* Progress selector (bottom left) */}
+      <div className="progress-selector">
+        <button className="progress-trigger" onClick={() => setShowProgressModal(true)} aria-label={T.progress.viewBtn}>
+          <span>{getPenguinStage(progressData.firstStepTokens).emoji}</span>
+          <span style={{ fontSize: "0.8rem" }}>{progressData.firstStepTokens}</span>
+        </button>
+      </div>
+
+      {/* Token toast */}
+      {tokenToast && (
+        <div className="token-toast">{tokenToast.text}</div>
+      )}
 
       {/* Language selector (bottom right) */}
       <div className="lang-selector">
