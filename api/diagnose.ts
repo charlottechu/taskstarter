@@ -20,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const langInstruction = lang === 'en'
     ? '\n\nIMPORTANT: Write ALL values in the JSON entirely in English. Do not use Japanese.'
     : lang === 'zh'
-    ? '\n\n重要：请将JSON中的所有内容完全用简体中文书写，不要使用日语。'
+    ? '\n\n重要：请将JSON中的所有内容完全用简体中文书写，不要使用日语或英语。'
     : '';
 
   const prompt = `あなたは先延ばし癖・注意力の問題を抱える人を支援するタスク分解アシスタントです。
@@ -46,13 +46,11 @@ recommendedModeの選び方:
 - "quick": 比較的シンプルなタスク
 - "recovery": 「再開」「久しぶり」「続き」などの文脈がある場合
 
-${langInstruction}
-
 questionsのルール:
 - 必ず最初の質問は「ユーザーが入力したタスクの具体的な中身を確認する」質問にすること。例：「『部屋の掃除』とのことですが、掃除・除菌・水回りの清掃ですか？それとも物の整理・断捨離ですか？」のように、曖昧な言葉を解像度高く確認する
 - 残りの質問はタスクの範囲・期限・障壁・環境など、計画に必要な具体情報を引き出すものにする
 - 全て「${task}」に完全に特化した具体的な質問にすること。汎用的な質問は禁止
-全ての文字列は日本語で。温かく非批判的なトーンで。`;
+温かく非批判的なトーンで。${langInstruction}`;
 
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
