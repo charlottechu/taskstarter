@@ -93,6 +93,18 @@ export default function App() {
   const [unstuckResult, setUnstuckResult] = useState<UnstuckResult | null>(null);
   const [isUnstuckLoading, setIsUnstuckLoading] = useState(false);
   const [isBreakingDown, setIsBreakingDown] = useState(false);
+
+  // AI Reality Check — keep users pointed at today's real goal
+  const [todaysGoalInput, setTodaysGoalInput] = useState("");
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [goalEditValue, setGoalEditValue] = useState("");
+  const [realityChoice, setRealityChoice] = useState<null | "progress" | "prep" | "avoid">(null);
+  const [driftNudgeIndex, setDriftNudgeIndex] = useState(0);
+  const [subtaskSwitches, setSubtaskSwitches] = useState(0);
+  const [showReflectionModal, setShowReflectionModal] = useState(false);
+  const [reflectDistance, setReflectDistance] = useState<null | "closer" | "same" | "unsure">(null);
+  const [reflectMoved, setReflectMoved] = useState("");
+  const [reflectNext, setReflectNext] = useState("");
   const [showLangMenu, setShowLangMenu] = useState(false);
 
   // Gentle Progress System
@@ -151,6 +163,9 @@ export default function App() {
   useEffect(() => {
     setEnergyLevel(null);
     setUnstuckResult(null);
+    setSubtaskSwitches(0);
+    setRealityChoice(null);
+    setEditingGoal(false);
   }, [selectedParentTaskId]);
 
   // Recovery check on first load
@@ -290,6 +305,7 @@ export default function App() {
       title: originalTask,
       diagnosis: diagnosisResult.taskDiagnosis,
       userStateDiagnosis: diagnosisResult.userStateDiagnosis,
+      todaysRealGoal: todaysGoalInput.trim(),
       supportMode: selectedMode,
       subtasks: editingSubtasks,
       parkingThoughts: [],
@@ -307,6 +323,7 @@ export default function App() {
     setDiagnosisResult(null);
     setFollowUpAnswers([]);
     setEditingSubtasks([]);
+    setTodaysGoalInput("");
   };
 
   const currentParentTask = savedTasks.find(t => t.id === selectedParentTaskId) || null;
@@ -357,6 +374,29 @@ export default function App() {
     ));
   };
 
+  const updateGoal = (goal: string) => {
+    if (!currentParentTask) return;
+    saveTasksToStorage(savedTasks.map(t =>
+      t.id === currentParentTask.id ? { ...t, todaysRealGoal: goal } : t
+    ));
+  };
+
+  const startGoalEdit = () => {
+    setGoalEditValue(currentParentTask?.todaysRealGoal || "");
+    setEditingGoal(true);
+  };
+
+  const saveGoalEdit = () => {
+    updateGoal(goalEditValue.trim());
+    setEditingGoal(false);
+  };
+
+  // Reality Check — self-awareness only, never scored. ②/③ gently nudge back to the goal.
+  const handleRealityChoice = (choice: "progress" | "prep" | "avoid") => {
+    setRealityChoice(choice);
+    if (choice !== "progress") setDriftNudgeIndex(i => i + 1);
+  };
+
   const startSubtaskWorkImpl = (subtaskId: string) => {
     if (!currentParentTask) return;
     const sub = currentParentTask.subtasks.find(s => s.id === subtaskId);
@@ -372,6 +412,9 @@ export default function App() {
     setIsTimerRunning(true);
     setTimerBonusGranted(false);
     setUnstuckResult(null);
+    setRealityChoice(null);
+    // Count focus switches this session — many starts without a completion may signal drift.
+    setSubtaskSwitches(c => c + 1);
     earnProgress('session_start', subtaskId);
     setAppStep("work_mode");
   };
@@ -497,18 +540,30 @@ export default function App() {
     setCurrentThought("");
   };
 
+  // Completing now opens a goal-oriented reflection first (progress over completion).
   const handleCompleteSubtask = () => {
+    if (!currentParentTask || !selectedSubtaskId) return;
+    setReflectDistance(null);
+    setReflectMoved("");
+    setReflectNext("");
+    setIsTimerRunning(false);
+    if (timerRef.current) clearInterval(timerRef.current);
+    setShowReflectionModal(true);
+  };
+
+  const finalizeSubtaskCompletion = () => {
     if (!currentParentTask || !selectedSubtaskId) return;
     const willCompleteAll = currentParentTask.subtasks.every(
       s => s.status === 'completed' || s.id === selectedSubtaskId
     );
     updateSubtaskField(selectedSubtaskId, { status: "completed", interactiveAnswers });
-    setIsTimerRunning(false);
-    if (timerRef.current) clearInterval(timerRef.current);
     earnProgress('subtask_complete', selectedSubtaskId);
     if (willCompleteAll) {
       setTimeout(() => earnProgress('task_complete', currentParentTask.id), 700);
     }
+    setShowReflectionModal(false);
+    setSubtaskSwitches(0);
+    setRealityChoice(null);
     setAppStep("parent_detail");
     setSelectedSubtaskId(null);
   };
@@ -547,6 +602,41 @@ ${T.copyPlan.footer}`;
   };
 
   const currentEnergyOpt = T.energy.options.find((_, i) => (["low","normal","high"] as EnergyLevel[])[i] === energyLevel);
+
+  // Persistent "Today's Real Goal" banner. editable=true (plan view) allows inline editing.
+  const renderGoalBanner = (editable: boolean) => {
+    const goal = currentParentTask?.todaysRealGoal || "";
+    if (editingGoal && editable) {
+      return (
+        <div className="goal-banner goal-banner-editing">
+          <input type="text" className="input-field" autoFocus
+            placeholder={T.realityCheck.goalPlaceholder}
+            value={goalEditValue} onChange={(e) => setGoalEditValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") saveGoalEdit(); }}
+            style={{ margin: 0, flex: 1, minWidth: 0 }} />
+          <button onClick={saveGoalEdit} className="btn btn-primary" style={{ padding: "0.5rem 1rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}>
+            {T.realityCheck.saveBtn}
+          </button>
+          <button onClick={() => setEditingGoal(false)} className="btn btn-text" style={{ padding: "0.5rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}>
+            {T.realityCheck.cancelBtn}
+          </button>
+        </div>
+      );
+    }
+    return (
+      <div className="goal-banner">
+        <span className="goal-banner-label">{T.realityCheck.bannerLabel}</span>
+        <span className="goal-banner-text" style={{ fontStyle: goal ? "normal" : "italic", opacity: goal ? 1 : 0.7 }}>
+          {goal || T.realityCheck.bannerEmpty}
+        </span>
+        {editable && (
+          <button onClick={startGoalEdit} className="goal-banner-edit" aria-label="edit goal">
+            {T.realityCheck.editBtn}
+          </button>
+        )}
+      </div>
+    );
+  };
 
   return (
     <>
@@ -794,6 +884,23 @@ ${T.copyPlan.footer}`;
               {T.editing.desc}
             </p>
 
+            {/* Today's Real Goal — captured right after diagnosis + subtask generation */}
+            <div style={{ padding: "1.25rem 1.5rem", backgroundColor: "#fff8f0", border: "1.5px solid var(--accent-light)", borderRadius: "1.25rem", marginBottom: "2rem" }}>
+              <label htmlFor="goal-input" style={{ display: "block", fontSize: "0.95rem", fontWeight: "800", color: "var(--accent-hover)", marginBottom: "0.4rem" }}>
+                {T.realityCheck.goalSectionTitle}
+              </label>
+              <p style={{ fontSize: "0.9rem", color: "var(--text-main)", marginBottom: "0.75rem", lineHeight: "1.5" }}>
+                {T.realityCheck.goalQuestion}
+              </p>
+              <input id="goal-input" type="text" className="input-field"
+                placeholder={T.realityCheck.goalPlaceholder}
+                value={todaysGoalInput} onChange={(e) => setTodaysGoalInput(e.target.value)}
+                style={{ margin: 0, width: "100%" }} />
+              <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "0.5rem", fontStyle: "italic" }}>
+                {T.realityCheck.goalHint}
+              </p>
+            </div>
+
             <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginBottom: "2rem" }}>
               {editingSubtasks.map((sub, index) => (
                 <div key={sub.id} className="edit-subtask-item"
@@ -853,6 +960,9 @@ ${T.copyPlan.footer}`;
                   {copySuccess ? T.parentDetail.copiedBtn : T.parentDetail.copyBtn}
                 </button>
               </div>
+
+              {/* Today's Real Goal banner (editable) */}
+              {renderGoalBanner(true)}
 
               {/* Progress */}
               <div style={{ background: "var(--bg-base)", padding: "1.25rem 1.5rem", borderRadius: "1.25rem", marginBottom: "1.5rem" }}>
@@ -1035,6 +1145,16 @@ ${T.copyPlan.footer}`;
                 {T.workMode.backBtn}
               </button>
 
+              {/* Persistent goal reminder so the bigger purpose stays visible inside a subtask */}
+              {renderGoalBanner(false)}
+
+              {/* Gentle drift hint after many focus switches without completing */}
+              {subtaskSwitches >= 3 && (
+                <div className="drift-banner">
+                  {T.realityCheck.driftBanner}
+                </div>
+              )}
+
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem", flexWrap: "wrap" }}>
                   <span style={{ fontSize: "0.8rem", color: "var(--accent)", textTransform: "uppercase", fontWeight: "700" }}>
@@ -1070,6 +1190,36 @@ ${T.copyPlan.footer}`;
                   </span>
                   <p style={{ fontSize: "0.88rem", color: "var(--text-main)", lineHeight: "1.4" }}>{currentSubtask.concreteOutput}</p>
                 </div>
+              </div>
+
+              {/* Reality Check — self-awareness, not scoring */}
+              <div className="reality-check-card">
+                <div className="reality-check-title">{T.realityCheck.cardTitle}</div>
+                <p className="reality-check-q">{T.realityCheck.cardQuestion}</p>
+                <p className="reality-check-subq">{T.realityCheck.cardSubQuestion}</p>
+                <div className="reality-check-choices">
+                  {([
+                    ["progress", T.realityCheck.choiceProgress],
+                    ["prep", T.realityCheck.choicePrep],
+                    ["avoid", T.realityCheck.choiceAvoid],
+                  ] as const).map(([key, label]) => (
+                    <button key={key} type="button"
+                      className={`reality-choice${realityChoice === key ? " selected-" + key : ""}`}
+                      onClick={() => handleRealityChoice(key)}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {realityChoice && (
+                  <p className={`reality-feedback reality-feedback-${realityChoice}`}>
+                    {realityChoice === "progress"
+                      ? T.realityCheck.feedbackProgress
+                      : realityChoice === "prep"
+                      ? T.realityCheck.feedbackPrep
+                      : T.realityCheck.driftPrompts[driftNudgeIndex % T.realityCheck.driftPrompts.length]}
+                  </p>
+                )}
+                <p className="reality-check-note">{T.realityCheck.cardNote}</p>
               </div>
 
               {/* Timer */}
@@ -1376,6 +1526,57 @@ ${T.copyPlan.footer}`;
                 </button>
                 <button onClick={() => setDeleteConfirmTaskId(null)} className="btn btn-secondary" style={{ padding: "0.85rem" }}>
                   {T.deleteModal.cancelBtn}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===== 9. Progress Reflection (goal-oriented, on completion) ===== */}
+        {showReflectionModal && (
+          <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.45)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, padding: "1rem" }}>
+            <div className="card fade-in" style={{ maxWidth: "520px", width: "100%", padding: "2rem", boxShadow: "0 20px 48px rgba(0,0,0,0.15)", maxHeight: "90vh", overflowY: "auto" }}>
+              <h3 style={{ fontSize: "1.25rem", fontWeight: "700", marginBottom: "0.5rem", color: "var(--text-main)" }}>
+                {T.realityCheck.reflectTitle}
+              </h3>
+              {currentParentTask?.todaysRealGoal && (
+                <p style={{ fontSize: "0.82rem", color: "var(--accent-hover)", fontWeight: "600", marginBottom: "1.5rem" }}>
+                  {T.realityCheck.bannerLabel}: {currentParentTask.todaysRealGoal}
+                </p>
+              )}
+
+              <label className="input-label" style={{ fontSize: "0.9rem", color: "var(--text-main)" }}>{T.realityCheck.reflectQ1}</label>
+              <input type="text" className="input-field" placeholder={T.realityCheck.reflectQ1Placeholder}
+                value={reflectMoved} onChange={(e) => setReflectMoved(e.target.value)}
+                style={{ marginTop: "0.4rem", marginBottom: "1.25rem", width: "100%" }} />
+
+              <label className="input-label" style={{ fontSize: "0.9rem", color: "var(--text-main)" }}>{T.realityCheck.reflectQ2}</label>
+              <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.4rem", marginBottom: "1.25rem", flexWrap: "wrap" }}>
+                {([
+                  ["closer", T.realityCheck.reflectQ2Closer],
+                  ["same", T.realityCheck.reflectQ2Same],
+                  ["unsure", T.realityCheck.reflectQ2Unsure],
+                ] as const).map(([key, label]) => (
+                  <button key={key} type="button"
+                    className={`reality-choice${reflectDistance === key ? " selected-progress" : ""}`}
+                    style={{ flex: 1, minWidth: "100px" }}
+                    onClick={() => setReflectDistance(key)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <label className="input-label" style={{ fontSize: "0.9rem", color: "var(--text-main)" }}>{T.realityCheck.reflectQ3}</label>
+              <input type="text" className="input-field" placeholder={T.realityCheck.reflectQ3Placeholder}
+                value={reflectNext} onChange={(e) => setReflectNext(e.target.value)}
+                style={{ marginTop: "0.4rem", marginBottom: "1.75rem", width: "100%" }} />
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                <button onClick={finalizeSubtaskCompletion} className="btn btn-primary" style={{ padding: "0.95rem", fontSize: "1rem" }}>
+                  {T.realityCheck.reflectDoneBtn}
+                </button>
+                <button onClick={finalizeSubtaskCompletion} className="btn btn-text" style={{ fontSize: "0.85rem" }}>
+                  {T.realityCheck.reflectSkipBtn}
                 </button>
               </div>
             </div>

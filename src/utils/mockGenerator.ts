@@ -52,6 +52,7 @@ export interface ParentTask {
   title: string;
   diagnosis: string;
   userStateDiagnosis: string;
+  todaysRealGoal: string;
   supportMode: SupportMode;
   subtasks: Subtask[];
   parkingThoughts: ParkingThought[];

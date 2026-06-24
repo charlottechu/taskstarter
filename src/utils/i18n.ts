@@ -146,6 +146,39 @@ export interface Translations {
     unstuckFailed: string;
     rateLimited: string;
   };
+  realityCheck: {
+    goalSectionTitle: string;
+    goalQuestion: string;
+    goalPlaceholder: string;
+    goalHint: string;
+    bannerLabel: string;
+    bannerEmpty: string;
+    editBtn: string;
+    saveBtn: string;
+    cancelBtn: string;
+    cardTitle: string;
+    cardQuestion: string;
+    cardSubQuestion: string;
+    choiceProgress: string;
+    choicePrep: string;
+    choiceAvoid: string;
+    cardNote: string;
+    feedbackProgress: string;
+    feedbackPrep: string;
+    driftPrompts: string[];
+    driftBanner: string;
+    reflectTitle: string;
+    reflectQ1: string;
+    reflectQ1Placeholder: string;
+    reflectQ2: string;
+    reflectQ2Closer: string;
+    reflectQ2Same: string;
+    reflectQ2Unsure: string;
+    reflectQ3: string;
+    reflectQ3Placeholder: string;
+    reflectDoneBtn: string;
+    reflectSkipBtn: string;
+  };
   progress: {
     viewBtn: string;
     modalTitle: string;
@@ -318,6 +351,43 @@ const ja: Translations = {
     subtasksFailed: '手順の生成に失敗しました。もう一度お試しください。',
     unstuckFailed: 'サポートの取得に失敗しました。\n',
     rateLimited: 'AIの利用上限に達しました。少し時間をおいてからもう一度お試しください。',
+  },
+  realityCheck: {
+    goalSectionTitle: '🎯 今日のリアルゴール',
+    goalQuestion: 'もし今日1つだけ前に進めるなら、何が一番大事ですか？',
+    goalPlaceholder: '例：発表構成を決める',
+    goalHint: '完璧な計画より、今日の「一番大事な一歩」を決めましょう。（後から変えてもOK）',
+    bannerLabel: '🎯 今日のリアルゴール',
+    bannerEmpty: '今日のゴールを設定しましょう',
+    editBtn: '✏️',
+    saveBtn: '保存',
+    cancelBtn: 'キャンセル',
+    cardTitle: '🔍 リアリティチェック',
+    cardQuestion: '今やっていることは、今日のゴールに近づいていますか？',
+    cardSubQuestion: '今の作業は、どれに近いですか？',
+    choiceProgress: '① 前進',
+    choicePrep: '② 準備',
+    choiceAvoid: '③ 回避',
+    cardNote: 'これは評価ではありません。気づきのためのものです。',
+    feedbackProgress: 'いい流れです！🌱 その調子で、今日のゴールに向かいましょう。',
+    feedbackPrep: '準備も大切な一歩です。そろそろ本題に進めそうですか？',
+    driftPrompts: [
+      '少し寄り道しているかもしれません。',
+      '今日のゴールを思い出してみましょう。',
+      'まずは本当に重要な部分を進めませんか？',
+    ],
+    driftBanner: '🍃 少し寄り道しているかもしれません。今日のゴールを思い出してみましょう。',
+    reflectTitle: '🌙 今日の振り返り',
+    reflectQ1: '今日は何を前に進めましたか？',
+    reflectQ1Placeholder: '例：発表の構成をざっくり決めた',
+    reflectQ2: '今日のゴールとの距離は縮まりましたか？',
+    reflectQ2Closer: '近づいた',
+    reflectQ2Same: '同じくらい',
+    reflectQ2Unsure: 'まだこれから',
+    reflectQ3: '次に本当に重要な一歩は何ですか？',
+    reflectQ3Placeholder: '例：スライド1枚目を作る',
+    reflectDoneBtn: '完了して計画に戻る',
+    reflectSkipBtn: 'スキップして戻る',
   },
   progress: {
     viewBtn: '🐧 成長記録',
@@ -492,6 +562,43 @@ const en: Translations = {
     unstuckFailed: 'Failed to get support.\n',
     rateLimited: 'The AI usage limit has been reached. Please wait a little while and try again.',
   },
+  realityCheck: {
+    goalSectionTitle: "🎯 Today's Real Goal",
+    goalQuestion: 'If you could move just one thing forward today, what matters most?',
+    goalPlaceholder: 'e.g. Decide the presentation outline',
+    goalHint: "Forget the perfect plan — just pick today's one most important step. (You can change it later.)",
+    bannerLabel: "🎯 Today's Real Goal",
+    bannerEmpty: 'Set your goal for today',
+    editBtn: '✏️',
+    saveBtn: 'Save',
+    cancelBtn: 'Cancel',
+    cardTitle: '🔍 Reality Check',
+    cardQuestion: "Is what you're doing right now bringing you closer to today's goal?",
+    cardSubQuestion: 'Which is your current work closest to?',
+    choiceProgress: '① Progress',
+    choicePrep: '② Preparation',
+    choiceAvoid: '③ Avoidance',
+    cardNote: "This isn't a score. It's just for self-awareness.",
+    feedbackProgress: "Nice flow! 🌱 Keep going toward today's goal.",
+    feedbackPrep: 'Preparation matters too. Ready to move on to the real thing soon?',
+    driftPrompts: [
+      'You might be taking a little detour.',
+      "Let's remember today's goal.",
+      'How about tackling the part that truly matters first?',
+    ],
+    driftBanner: "🍃 You might be drifting a little. Let's remember today's goal.",
+    reflectTitle: "🌙 Today's Reflection",
+    reflectQ1: 'What did you move forward today?',
+    reflectQ1Placeholder: 'e.g. Roughed out the presentation structure',
+    reflectQ2: "Did you close the distance to today's goal?",
+    reflectQ2Closer: 'Got closer',
+    reflectQ2Same: 'About the same',
+    reflectQ2Unsure: 'Still ahead',
+    reflectQ3: "What's the next step that truly matters?",
+    reflectQ3Placeholder: 'e.g. Make the first slide',
+    reflectDoneBtn: 'Finish and return to plan',
+    reflectSkipBtn: 'Skip and return',
+  },
   progress: {
     viewBtn: '🐧 Progress',
     modalTitle: '🐧 Gentle Progress Log',
@@ -664,6 +771,43 @@ const zh: Translations = {
     subtasksFailed: '生成步骤失败，请重试。',
     unstuckFailed: '获取支持失败。\n',
     rateLimited: 'AI 使用次数已达上限，请稍后再试。',
+  },
+  realityCheck: {
+    goalSectionTitle: '🎯 今天的真正目标',
+    goalQuestion: '如果今天只能推进一件事，最重要的是什么？',
+    goalPlaceholder: '例：定下发表的结构',
+    goalHint: '别追求完美计划，先定下今天「最重要的一步」。（之后可以改）',
+    bannerLabel: '🎯 今天的真正目标',
+    bannerEmpty: '设定今天的目标',
+    editBtn: '✏️',
+    saveBtn: '保存',
+    cancelBtn: '取消',
+    cardTitle: '🔍 现实核对',
+    cardQuestion: '你现在做的事，正在靠近今天的目标吗？',
+    cardSubQuestion: '现在的工作更接近哪一种？',
+    choiceProgress: '① 前进',
+    choicePrep: '② 准备',
+    choiceAvoid: '③ 回避',
+    cardNote: '这不是打分，只是帮你觉察。',
+    feedbackProgress: '状态不错！🌱 继续朝今天的目标前进吧。',
+    feedbackPrep: '准备也很重要。差不多可以进入正题了吗？',
+    driftPrompts: [
+      '你可能有点绕路了。',
+      '回想一下今天的目标吧。',
+      '要不要先推进真正重要的那部分？',
+    ],
+    driftBanner: '🍃 你可能有点绕路了。回想一下今天的目标吧。',
+    reflectTitle: '🌙 今天的回顾',
+    reflectQ1: '今天你推进了什么？',
+    reflectQ1Placeholder: '例：大致定下了发表结构',
+    reflectQ2: '和今天的目标，距离拉近了吗？',
+    reflectQ2Closer: '靠近了',
+    reflectQ2Same: '差不多',
+    reflectQ2Unsure: '还在前面',
+    reflectQ3: '下一个真正重要的一步是什么？',
+    reflectQ3Placeholder: '例：做第一页幻灯片',
+    reflectDoneBtn: '完成并返回计划',
+    reflectSkipBtn: '跳过并返回',
   },
   progress: {
     viewBtn: '🐧 成长记录',

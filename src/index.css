@@ -957,6 +957,173 @@ footer {
   opacity: 0.6;
 }
 
+/* ===== AI Reality Check ===== */
+
+/* Today's Real Goal banner */
+.goal-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.85rem 1.25rem;
+  background: linear-gradient(135deg, #fff3e6 0%, #fff8f0 100%);
+  border: 1.5px solid var(--accent-light);
+  border-radius: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.goal-banner-editing {
+  flex-wrap: wrap;
+}
+
+.goal-banner-label {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--accent-hover);
+  white-space: nowrap;
+}
+
+.goal-banner-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.4;
+}
+
+.goal-banner-edit {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.5rem;
+  opacity: 0.7;
+  transition: var(--transition-smooth);
+}
+
+.goal-banner-edit:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+/* Gentle drift banner */
+.drift-banner {
+  padding: 0.85rem 1.25rem;
+  background-color: #f0f9f4;
+  border: 1px solid #bbe3c9;
+  border-left: 4px solid #6cc28e;
+  border-radius: 0.85rem;
+  font-size: 0.88rem;
+  color: #2f6b48;
+  line-height: 1.5;
+  margin-bottom: 1.5rem;
+}
+
+/* Reality Check card */
+.reality-check-card {
+  padding: 1.35rem 1.5rem;
+  background-color: #faf7ff;
+  border: 1.5px solid #e4daf7;
+  border-radius: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.reality-check-title {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #6b4ea8;
+  margin-bottom: 0.5rem;
+}
+
+.reality-check-q {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-main);
+  line-height: 1.5;
+  margin-bottom: 0.75rem;
+}
+
+.reality-check-subq {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
+.reality-check-choices {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.reality-choice {
+  flex: 1;
+  min-width: 90px;
+  padding: 0.7rem 0.5rem;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: center;
+  background-color: #ffffff;
+  border: 1.5px solid var(--border);
+  border-radius: 0.85rem;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.reality-choice:hover {
+  transform: translateY(-2px);
+}
+
+.reality-choice.selected-progress {
+  background-color: #e6f7ee;
+  border-color: #6cc28e;
+  color: #2f6b48;
+}
+
+.reality-choice.selected-prep {
+  background-color: #fff6e0;
+  border-color: #e8b84b;
+  color: #8a6116;
+}
+
+.reality-choice.selected-avoid {
+  background-color: #fdeef0;
+  border-color: #e89aa6;
+  color: #9c4452;
+}
+
+.reality-feedback {
+  margin-top: 0.9rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.reality-feedback-progress {
+  background-color: #e6f7ee;
+  color: #2f6b48;
+}
+
+.reality-feedback-prep {
+  background-color: #fff6e0;
+  color: #8a6116;
+}
+
+.reality-feedback-avoid {
+  background-color: #fdeef0;
+  color: #9c4452;
+}
+
+.reality-check-note {
+  margin-top: 0.9rem;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 /* ===== Gentle Progress System ===== */
 
 /* Token toast — top-right, slides in/out */
