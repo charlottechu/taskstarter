@@ -935,16 +935,26 @@ footer {
 }
 
 .unstuck-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
   padding: 1rem 1.25rem;
   background-color: #ffffff;
   border: 1px solid var(--border);
   border-radius: 1rem;
+  cursor: pointer;
   transition: var(--transition-smooth);
 }
 
-.unstuck-option:hover {
+.unstuck-option:hover:not(:disabled) {
   border-color: var(--accent);
   transform: translateX(3px);
+}
+
+.unstuck-option:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 /* ===== Gentle Progress System ===== */

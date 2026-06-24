@@ -106,6 +106,8 @@ export interface Translations {
     timerReset: string;
     unstuckBtn: string;
     unstuckLoading: string;
+    breakdownLoading: string;
+    rethinkSaved: string;
     completeBtn: string;
     sidebarTitle: string;
     sidebarParentLabel: string;
@@ -277,6 +279,8 @@ const ja: Translations = {
     timerReset: '🔄 リセット',
     unstuckBtn: '😵 つまずいた。助けて！',
     unstuckLoading: '🤔 考え中...',
+    breakdownLoading: '🔪 さらに細かく分けています...',
+    rethinkSaved: '💡 別のアプローチをメモに追加しました',
     completeBtn: '🏆 この手順を完了して計画に戻る',
     sidebarTitle: '📁 親計画情報',
     sidebarParentLabel: '親タスク:',
@@ -448,6 +452,8 @@ const en: Translations = {
     timerReset: '🔄 Reset',
     unstuckBtn: '😵 I\'m stuck. Help me!',
     unstuckLoading: '🤔 Thinking...',
+    breakdownLoading: '🔪 Breaking it down further...',
+    rethinkSaved: '💡 Added the alternative approach to your notes',
     completeBtn: '🏆 Complete this step and return to plan',
     sidebarTitle: '📁 Plan info',
     sidebarParentLabel: 'Parent task:',
@@ -619,6 +625,8 @@ const zh: Translations = {
     timerReset: '🔄 重置',
     unstuckBtn: '😵 卡住了，帮帮我！',
     unstuckLoading: '🤔 思考中...',
+    breakdownLoading: '🔪 正在拆得更细...',
+    rethinkSaved: '💡 已把另一种方法加入备忘',
     completeBtn: '🏆 完成这个步骤，返回计划',
     sidebarTitle: '📁 计划信息',
     sidebarParentLabel: '父任务：',

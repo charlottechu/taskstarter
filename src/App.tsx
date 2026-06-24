@@ -23,7 +23,7 @@ import {
   type SupportMode,
   type SubtaskStatus,
 } from "./utils/mockGenerator";
-import { getDiagnosis, generateSubtasks, generateContextRecovery, getUnstuckHelp, type UnstuckResult } from "./utils/apiClient";
+import { getDiagnosis, generateSubtasks, generateContextRecovery, getUnstuckHelp, breakdownSubtask, type UnstuckResult } from "./utils/apiClient";
 import { getT, type Lang } from "./utils/i18n";
 
 type AppStep =
@@ -92,6 +92,7 @@ export default function App() {
   const [pendingSubtaskId, setPendingSubtaskId] = useState<string | null>(null);
   const [unstuckResult, setUnstuckResult] = useState<UnstuckResult | null>(null);
   const [isUnstuckLoading, setIsUnstuckLoading] = useState(false);
+  const [isBreakingDown, setIsBreakingDown] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
 
   // Gentle Progress System
@@ -410,6 +411,62 @@ export default function App() {
       alert(isRateLimitError(msg) ? T.alerts.rateLimited : T.alerts.unstuckFailed + msg);
     } finally {
       setIsUnstuckLoading(false);
+    }
+  };
+
+  // The three unstuck options always come back in a fixed order:
+  // 0 = break down smaller, 1 = try another approach, 2 = skip for now.
+  const handleUnstuckOption = async (index: number) => {
+    if (!currentParentTask || !currentSubtask) return;
+
+    // 0: break it down — ask the AI for smaller sub-steps and replace this step with them.
+    if (index === 0) {
+      if (isBreakingDown) return;
+      setIsBreakingDown(true);
+      try {
+        const smaller = await breakdownSubtask(currentParentTask.title, currentSubtask, lang);
+        // Carry over any notes from the original step into the first smaller step.
+        if (smaller[0] && currentSubtask.notes) {
+          smaller[0] = { ...smaller[0], notes: currentSubtask.notes };
+        }
+        const idx = currentParentTask.subtasks.findIndex(s => s.id === currentSubtask.id);
+        const newSubtasks = [...currentParentTask.subtasks];
+        newSubtasks.splice(idx === -1 ? newSubtasks.length : idx, idx === -1 ? 0 : 1, ...smaller);
+        saveTasksToStorage(savedTasks.map(t =>
+          t.id === currentParentTask.id ? { ...t, subtasks: newSubtasks } : t
+        ));
+        setIsTimerRunning(false);
+        if (timerRef.current) clearInterval(timerRef.current);
+        setUnstuckResult(null);
+        setSelectedSubtaskId(null);
+        setAppStep("parent_detail");
+      } finally {
+        setIsBreakingDown(false);
+      }
+      return;
+    }
+
+    // 1: try another approach — append the suggestion to the workspace notes.
+    if (index === 1) {
+      const opt = unstuckResult?.options[1];
+      if (!opt) return;
+      const addition = `💡 ${opt.label}: ${opt.description}`;
+      const existing = currentSubtask.notes?.trim();
+      updateSubtaskField(currentSubtask.id, {
+        notes: existing ? `${existing}\n\n${addition}` : addition,
+      });
+      setUnstuckResult(null);
+      alert(T.workMode.rethinkSaved);
+      return;
+    }
+
+    // 2: skip for now — leave this step and go back to the plan.
+    if (index === 2) {
+      setIsTimerRunning(false);
+      if (timerRef.current) clearInterval(timerRef.current);
+      setUnstuckResult(null);
+      setSelectedSubtaskId(null);
+      setAppStep("parent_detail");
     }
   };
 
@@ -1086,14 +1143,20 @@ ${T.copyPlan.footer}`;
                     </p>
                     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                       {unstuckResult.options.map((opt, i) => (
-                        <div key={i} className="unstuck-option">
+                        <button
+                          key={i}
+                          type="button"
+                          className="unstuck-option"
+                          onClick={() => handleUnstuckOption(i)}
+                          disabled={isBreakingDown}
+                          aria-busy={i === 0 && isBreakingDown}>
                           <div style={{ fontSize: "0.9rem", fontWeight: "700", color: "var(--text-main)", marginBottom: "0.3rem" }}>
-                            {opt.emoji} {opt.label}
+                            {i === 0 && isBreakingDown ? T.workMode.breakdownLoading : `${opt.emoji} ${opt.label}`}
                           </div>
                           <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", lineHeight: "1.5" }}>
                             {opt.description}
                           </p>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </div>
