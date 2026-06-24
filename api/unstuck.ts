@@ -63,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 全ての文字列は日本語。温かく非批判的なトーンで。${langInstruction}`;
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
     const response = await model.generateContent(prompt);
     const text = response.response.text();
     const result = JSON.parse(extractJSON(text.trim()));

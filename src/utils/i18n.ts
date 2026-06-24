@@ -142,6 +142,7 @@ export interface Translations {
     diagnosisFailed: string;
     subtasksFailed: string;
     unstuckFailed: string;
+    rateLimited: string;
   };
   progress: {
     viewBtn: string;
@@ -274,7 +275,7 @@ const ja: Translations = {
     timerStart: '▶️ スタート',
     timerPause: '⏸️ 一時停止',
     timerReset: '🔄 リセット',
-    unstuckBtn: '😵 カタマった。助けて！',
+    unstuckBtn: '😵 つまずいた。助けて！',
     unstuckLoading: '🤔 考え中...',
     completeBtn: '🏆 この手順を完了して計画に戻る',
     sidebarTitle: '📁 親計画情報',
@@ -312,6 +313,7 @@ const ja: Translations = {
     diagnosisFailed: '診断に失敗しました。\n\n',
     subtasksFailed: '手順の生成に失敗しました。もう一度お試しください。',
     unstuckFailed: 'サポートの取得に失敗しました。\n',
+    rateLimited: 'AIの利用上限に達しました。少し時間をおいてからもう一度お試しください。',
   },
   progress: {
     viewBtn: '🐧 成長記録',
@@ -482,6 +484,7 @@ const en: Translations = {
     diagnosisFailed: 'Diagnosis failed.\n\n',
     subtasksFailed: 'Failed to generate steps. Please try again.',
     unstuckFailed: 'Failed to get support.\n',
+    rateLimited: 'The AI usage limit has been reached. Please wait a little while and try again.',
   },
   progress: {
     viewBtn: '🐧 Progress',
@@ -652,6 +655,7 @@ const zh: Translations = {
     diagnosisFailed: '诊断失败。\n\n',
     subtasksFailed: '生成步骤失败，请重试。',
     unstuckFailed: '获取支持失败。\n',
+    rateLimited: 'AI 使用次数已达上限，请稍后再试。',
   },
   progress: {
     viewBtn: '🐧 成长记录',

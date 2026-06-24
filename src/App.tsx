@@ -36,6 +36,11 @@ type AppStep =
 
 type EnergyLevel = "low" | "normal" | "high";
 
+// Gemini returns 429 / "Too Many Requests" / "quota" when the API usage limit is hit.
+// Surface a friendly message instead of dumping the raw error stack.
+const isRateLimitError = (msg: string): boolean =>
+  /429|too many requests|quota|rate.?limit/i.test(msg);
+
 const STATUS_COLORS: Record<SubtaskStatus, string> = {
   not_started: "#94a3b8",
   active: "var(--primary)",
@@ -198,7 +203,7 @@ export default function App() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('Diagnosis failed:', msg);
-      alert(T.alerts.diagnosisFailed + msg);
+      alert(isRateLimitError(msg) ? T.alerts.rateLimited : T.alerts.diagnosisFailed + msg);
     } finally {
       setIsLoading(false);
       setLoadingMessage("");
@@ -219,8 +224,9 @@ export default function App() {
       setEditingSubtasks(generated);
       setAppStep("editing");
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       console.error(err);
-      alert(T.alerts.subtasksFailed);
+      alert(isRateLimitError(msg) ? T.alerts.rateLimited : T.alerts.subtasksFailed);
     } finally {
       setIsLoading(false);
       setLoadingMessage("");
@@ -401,7 +407,7 @@ export default function App() {
       setUnstuckResult(result);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      alert(T.alerts.unstuckFailed + msg);
+      alert(isRateLimitError(msg) ? T.alerts.rateLimited : T.alerts.unstuckFailed + msg);
     } finally {
       setIsUnstuckLoading(false);
     }
