@@ -32,6 +32,7 @@ export interface Subtask {
   interactiveSteps: InteractiveStep[];
   interactiveAnswers: string[];
   children?: string[];
+  completedAt?: string; // ISO timestamp set when marked completed — powers "Recent Progress"
 }
 
 export interface ParkingThought {
@@ -60,6 +61,9 @@ export interface ParentTask {
   isTooBig: boolean;
   reframingMessage: string;
   createdAt: string;
+  deadline?: string | null;   // "YYYY-MM-DD" or null — drives the DDL urgency experience
+  completedAt?: string | null; // ISO timestamp when the whole task was completed — Victory Wall
+  reflection?: string;         // short reflection captured on the celebration screen
 }
 
 export interface DiagnosisResult {
@@ -180,6 +184,9 @@ export function getStatusAdvice(status: SubtaskStatus): string | null {
 // 1. タスク診断 ＆ ユーザー状態診断
 // ============================================================
 
+// Note: this rule-based fallback currently only produces Japanese. It is only
+// reached when the /api/diagnose endpoint is unavailable (no API key / quota /
+// network). The real localized output comes from api/diagnose.ts.
 export function getDiagnosis(task: string): DiagnosisResult {
   const t = task.toLowerCase();
 

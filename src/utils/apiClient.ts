@@ -5,8 +5,26 @@ import {
   generateContextRecovery as mockGenerateContextRecovery,
 } from './mockGenerator';
 
-export async function getDiagnosis(task: string): Promise<DiagnosisResult> {
-  return mockGetDiagnosis(task);
+export async function getDiagnosis(task: string, lang?: string): Promise<DiagnosisResult> {
+  try {
+    const res = await fetch('/api/diagnose', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task, lang }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || 'Diagnose API failed');
+    }
+    const data = (await res.json()) as DiagnosisResult;
+    if (!data || !Array.isArray(data.questions)) throw new Error('Invalid diagnosis result');
+    return data;
+  } catch (err) {
+    // API failed (quota/429/network/no key/etc.) — fall back to the rule-based mock.
+    // The mock is Japanese-only; localized output comes from the /api/diagnose path above.
+    console.warn('Diagnose API failed, using rule-based fallback:', err);
+    return mockGetDiagnosis(task);
+  }
 }
 
 export async function generateSubtasks(

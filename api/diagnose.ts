@@ -17,40 +17,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { task, lang } = req.body as { task: string; lang?: string };
   if (!task) return res.status(400).json({ error: 'task is required' });
 
+  const langName = lang === 'en' ? 'English' : lang === 'zh' ? 'Simplified Chinese' : 'Japanese';
   const langInstruction = lang === 'en'
-    ? '\n\nIMPORTANT: Write ALL values in the JSON entirely in English. Do not use Japanese.'
+    ? '\n\nIMPORTANT: Write ALL string values in the JSON entirely in English. Do not use Japanese or Chinese.'
     : lang === 'zh'
-    ? '\n\n重要：请将JSON中的所有内容完全用简体中文书写，不要使用日语或英语。'
-    : '';
+    ? '\n\n重要：请将 JSON 中所有字符串值完全用简体中文书写，绝对不要使用日语或英语。'
+    : '\n\n重要：JSON内のすべての文字列値を必ず日本語で記述してください。英語や中国語は使用しないでください。';
 
-  const prompt = `あなたは先延ばし癖・注意力の問題を抱える人を支援するタスク分解アシスタントです。
+  const prompt = `You are a task-breakdown assistant supporting people who struggle with procrastination and attention difficulties. Write every string value in the output in ${langName}.
 
-対象タスク: 「${task}」
+Target task: "${task}"
 
-このタスクを分析し、以下のJSON形式のみで回答してください。JSON以外のテキストは絶対に含めないでください。
+Analyze this task and respond ONLY with JSON in the following format. Never include any text outside the JSON. (The field descriptions below are in English, but the VALUES you produce must be written in ${langName}.)
 
 {
-  "taskDiagnosis": "このタスクが難しく感じる理由（1〜2文）",
-  "userStateDiagnosis": "ユーザーの今の精神状態の診断（1〜2文）",
-  "userStatePattern": "状態パターンのラベル（例：完璧主義、構造が見えない）",
+  "taskDiagnosis": "why this task feels hard (1-2 sentences)",
+  "userStateDiagnosis": "diagnosis of the user's current mental state (1-2 sentences)",
+  "userStatePattern": "a short label for the state pattern (e.g. perfectionism, no visible structure)",
   "isTooBig": false,
-  "tooBigNarrowingPrompt": "isTooBigがtrueの場合のみスコープを絞る問いかけ、falseなら空文字",
-  "questions": ["タスクをより具体的に計画するための質問を3〜4つ"],
+  "tooBigNarrowingPrompt": "only when isTooBig is true, a question that narrows the scope; otherwise an empty string",
+  "questions": ["3-4 questions that help plan the task more concretely"],
   "recommendedMode": "quick",
-  "reframingMessage": "ユーザーを励ますリフレーミングメッセージ（1文）"
+  "reframingMessage": "an encouraging reframing message for the user (1 sentence)"
 }
 
-recommendedModeの選び方:
-- "overwhelmed": 掃除・片付け・整理など物理的なタスク、またはユーザーが疲弊している場合
-- "deep": レポート・研究・就活など複雑なプロジェクト系
-- "quick": 比較的シンプルなタスク
-- "recovery": 「再開」「久しぶり」「続き」などの文脈がある場合
+How to choose recommendedMode:
+- "overwhelmed": physical tasks such as cleaning, tidying, or organizing, or when the user seems exhausted
+- "deep": complex projects such as reports, research, or job hunting
+- "quick": relatively simple tasks
+- "recovery": when there is context of resuming, "it's been a while", or continuing something
 
-questionsのルール:
-- 必ず最初の質問は「ユーザーが入力したタスクの具体的な中身を確認する」質問にすること。例：「『部屋の掃除』とのことですが、掃除・除菌・水回りの清掃ですか？それとも物の整理・断捨離ですか？」のように、曖昧な言葉を解像度高く確認する
-- 残りの質問はタスクの範囲・期限・障壁・環境など、計画に必要な具体情報を引き出すものにする
-- 全て「${task}」に完全に特化した具体的な質問にすること。汎用的な質問は禁止
-温かく非批判的なトーンで。${langInstruction}`;
+Rules for questions:
+- The FIRST question MUST confirm the concrete content of the task the user entered, clarifying vague wording at high resolution. For example, for a task like "clean my room", ask whether it means cleaning/disinfecting/wet areas, or sorting and decluttering possessions.
+- The remaining questions must draw out the concrete information needed for planning: scope, deadline, obstacles, environment, and so on.
+- Every question must be fully specific to "${task}". Generic questions are forbidden.
+
+Use a warm, non-judgmental tone.${langInstruction}`;
 
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });

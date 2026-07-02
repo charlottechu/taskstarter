@@ -25,6 +25,7 @@ import {
 } from "./utils/mockGenerator";
 import { getDiagnosis, generateSubtasks, generateContextRecovery, getUnstuckHelp, breakdownSubtask, type UnstuckResult } from "./utils/apiClient";
 import { getT, type Lang } from "./utils/i18n";
+import { deadlineInfo, urgencyRank, type Urgency } from "./utils/deadline";
 
 type AppStep =
   | "landing"
@@ -32,7 +33,9 @@ type AppStep =
   | "mode_select"
   | "editing"
   | "parent_detail"
-  | "work_mode";
+  | "work_mode"
+  | "celebration"
+  | "victory_wall";
 
 type EnergyLevel = "low" | "normal" | "high";
 
@@ -115,6 +118,11 @@ export default function App() {
   const [tokenToast, setTokenToast] = useState<{ amount: number; text: string } | null>(null);
   const [timerBonusGranted, setTimerBonusGranted] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // v6 — Celebrate Progress
+  const [deadlineInput, setDeadlineInput] = useState<string>(""); // "YYYY-MM-DD" while creating a task
+  const [celebrationTaskId, setCelebrationTaskId] = useState<string | null>(null);
+  const [celebrationReflection, setCelebrationReflection] = useState<string>("");
 
   useEffect(() => {
     try {
@@ -211,7 +219,7 @@ export default function App() {
     setIsLoading(true);
     setLoadingMessage(T.loading.diagnosis);
     try {
-      const result = await getDiagnosis(originalTask);
+      const result = await getDiagnosis(originalTask, lang);
       setDiagnosisResult(result);
       setFollowUpAnswers(new Array(result.questions.length).fill(""));
       setSelectedMode(result.recommendedMode);
@@ -313,6 +321,9 @@ export default function App() {
       isTooBig: diagnosisResult.isTooBig,
       reframingMessage: diagnosisResult.reframingMessage,
       createdAt: new Date().toLocaleString("ja-JP", { hour12: false }),
+      deadline: deadlineInput || null,
+      completedAt: null,
+      reflection: "",
     };
     const updated = [newParentTask, ...savedTasks];
     saveTasksToStorage(updated);
@@ -324,6 +335,12 @@ export default function App() {
     setFollowUpAnswers([]);
     setEditingSubtasks([]);
     setTodaysGoalInput("");
+    setDeadlineInput("");
+  };
+
+  // Update a saved task's deadline in place (used from the task-detail screen).
+  const setTaskDeadline = (taskId: string, deadline: string | null) => {
+    saveTasksToStorage(savedTasks.map(t => t.id === taskId ? { ...t, deadline } : t));
   };
 
   const currentParentTask = savedTasks.find(t => t.id === selectedParentTaskId) || null;
@@ -343,6 +360,48 @@ export default function App() {
     const completed = task.subtasks.filter(s => s.status === "completed").length;
     return Math.round((completed / task.subtasks.length) * 100);
   };
+
+  const isTaskDone = (task: ParentTask) =>
+    task.subtasks.length > 0 && task.subtasks.every(s => s.status === "completed");
+
+  const nextIncompleteSubtask = (task: ParentTask): Subtask | null =>
+    task.subtasks.find(s => s.status !== "completed") ?? null;
+
+  // Urgency-tuned encouragement — the tone adapts to how close the deadline is.
+  // Declared here (before the dashboard derived consts) so `focusTone` can use it.
+  const deadlineToneMessage = (deadline: string | null | undefined): string | null => {
+    const { urgency } = deadlineInfo(deadline);
+    if (urgency === "none") return null;
+    return T.deadline.tone[urgency];
+  };
+
+  // ----- v6 dashboard-derived views -----
+  // Active tasks (not yet fully done), ordered by nearest deadline; undated tasks fall to the end.
+  const activeTasks = savedTasks
+    .filter(t => !isTaskDone(t))
+    .sort((a, b) => urgencyRank(a.deadline) - urgencyRank(b.deadline));
+  const focusTask: ParentTask | null = activeTasks[0] ?? null;
+  const tomorrowTask: ParentTask | null = activeTasks[1] ?? null;
+  const focusNext = focusTask ? nextIncompleteSubtask(focusTask) : null;
+  const focusProgress = focusTask ? getProgressPercentage(focusTask) : 0;
+  const focusTone = focusTask ? deadlineToneMessage(focusTask.deadline) : null;
+
+  // Recently completed subtasks across all tasks, newest first (for "Recent Progress").
+  const recentCompletedSubtasks = savedTasks
+    .flatMap(t => t.subtasks.filter(s => s.status === "completed" && s.completedAt).map(s => ({ sub: s, task: t })))
+    .sort((a, b) => (b.sub.completedAt! > a.sub.completedAt! ? 1 : -1))
+    .slice(0, 4);
+
+  // Completed tasks for the Victory Wall, newest first.
+  const completedTasks = savedTasks
+    .filter(t => !!t.completedAt)
+    .sort((a, b) => (b.completedAt! > a.completedAt! ? 1 : -1));
+
+  const tokensEarnedToday = progressData.activityLog
+    .filter(e => e.date === todayISO())
+    .reduce((sum, e) => sum + EARN_AMOUNTS[e.type], 0);
+
+  const celebrationTask = savedTasks.find(t => t.id === celebrationTaskId) || null;
 
   const handleDeleteParentTask = (id: string) => {
     saveTasksToStorage(savedTasks.filter(t => t.id !== id));
@@ -553,19 +612,47 @@ export default function App() {
 
   const finalizeSubtaskCompletion = () => {
     if (!currentParentTask || !selectedSubtaskId) return;
-    const willCompleteAll = currentParentTask.subtasks.every(
-      s => s.status === 'completed' || s.id === selectedSubtaskId
+    const nowISO = new Date().toISOString();
+    // Build the updated subtasks + parent completion in a single save so the two
+    // writes don't race on the same `savedTasks` snapshot.
+    const updatedSubtasks = currentParentTask.subtasks.map(s =>
+      s.id === selectedSubtaskId
+        ? { ...s, status: "completed" as const, interactiveAnswers, completedAt: nowISO }
+        : s
     );
-    updateSubtaskField(selectedSubtaskId, { status: "completed", interactiveAnswers });
+    const willCompleteAll = updatedSubtasks.every(s => s.status === 'completed');
+    const updatedTask: ParentTask = {
+      ...currentParentTask,
+      subtasks: updatedSubtasks,
+      completedAt: willCompleteAll ? (currentParentTask.completedAt || nowISO) : (currentParentTask.completedAt ?? null),
+    };
+    saveTasksToStorage(savedTasks.map(t => t.id === updatedTask.id ? updatedTask : t));
     earnProgress('subtask_complete', selectedSubtaskId);
-    if (willCompleteAll) {
-      setTimeout(() => earnProgress('task_complete', currentParentTask.id), 700);
-    }
     setShowReflectionModal(false);
     setSubtaskSwitches(0);
     setRealityChoice(null);
-    setAppStep("parent_detail");
     setSelectedSubtaskId(null);
+    if (willCompleteAll) {
+      // Reward, then take the user to a dedicated celebration — never straight home.
+      setTimeout(() => earnProgress('task_complete', updatedTask.id), 700);
+      setCelebrationTaskId(updatedTask.id);
+      setCelebrationReflection(updatedTask.reflection || "");
+      setAppStep("celebration");
+    } else {
+      setAppStep("parent_detail");
+    }
+  };
+
+  // Persist the reflection typed on the celebration screen, then leave the screen.
+  const leaveCelebration = (dest: AppStep) => {
+    if (celebrationTaskId) {
+      const text = celebrationReflection.trim();
+      saveTasksToStorage(savedTasks.map(t => t.id === celebrationTaskId ? { ...t, reflection: text } : t));
+    }
+    setCelebrationTaskId(null);
+    setCelebrationReflection("");
+    setSelectedParentTaskId(null);
+    setAppStep(dest);
   };
 
   const handleCopyEntirePlan = () => {
@@ -602,6 +689,26 @@ ${T.copyPlan.footer}`;
   };
 
   const currentEnergyOpt = T.energy.options.find((_, i) => (["low","normal","high"] as EnergyLevel[])[i] === energyLevel);
+
+  const URGENCY_TEXT_COLOR: Record<Urgency, string> = {
+    none: "#94a3b8", relaxed: "#16a34a", soon: "#ca8a04", near: "#ea580c", today: "#dc2626", overdue: "#dc2626",
+  };
+
+  // Colored DDL pill — 🟢🟡🟠🔴 + a human phrase. Returns null when no deadline is set.
+  const renderDeadlineBadge = (deadline: string | null | undefined, size: "sm" | "md" = "sm") => {
+    const info = deadlineInfo(deadline);
+    if (info.daysLeft === null) return null;
+    const text =
+      info.urgency === "today" ? T.deadline.today
+      : info.urgency === "overdue" ? T.deadline.overdue
+      : T.deadline.daysLeft.replace("{n}", String(info.daysLeft));
+    const color = URGENCY_TEXT_COLOR[info.urgency];
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontSize: size === "md" ? "0.9rem" : "0.75rem", fontWeight: 700, color, backgroundColor: `${color}18`, padding: size === "md" ? "0.3rem 0.75rem" : "0.2rem 0.55rem", borderRadius: "9999px", whiteSpace: "nowrap" }}>
+        <span>{info.dot}</span>{text}
+      </span>
+    );
+  };
 
   // Persistent "Today's Real Goal" banner. editable=true (plan view) allows inline editing.
   const renderGoalBanner = (editable: boolean) => {
@@ -647,9 +754,9 @@ ${T.copyPlan.footer}`;
 
       <main className="container" style={{ maxWidth: appStep === "landing" && savedTasks.length === 0 ? "720px" : "1080px" }}>
 
-        {/* ===== 1. Landing ===== */}
-        {appStep === "landing" && (
-          <div className="landing-layout fade-in" style={{ display: "flex", gap: "2rem", flexDirection: savedTasks.length > 0 ? "row" : "column", alignItems: "stretch" }}>
+        {/* ===== 1. Landing / Dashboard ===== */}
+        {appStep === "landing" && savedTasks.length === 0 && (
+          <div className="landing-layout fade-in" style={{ display: "flex", gap: "2rem", flexDirection: "column", alignItems: "stretch" }}>
             <div className="landing-main card" style={{ flex: 1.2 }}>
               <h2 style={{ marginBottom: "1.5rem" }}>{T.landing.title}</h2>
               <p style={{ marginBottom: "2rem", fontSize: "0.95rem" }}>
@@ -680,80 +787,190 @@ ${T.copyPlan.footer}`;
                 </button>
               </form>
             </div>
+          </div>
+        )}
 
-            {savedTasks.length > 0 && (
-              <div className="landing-sidebar" style={{ flex: 1.1, display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+        {appStep === "landing" && savedTasks.length > 0 && (
+          <div className="landing-layout fade-in" style={{ display: "flex", gap: "2rem", flexDirection: "row", alignItems: "flex-start" }}>
 
-                {/* Daily Progress Card */}
-                {(() => {
-                  const stage = getPenguinStage(progressData.firstStepTokens);
-                  const todayActivity = progressData.activityLog.filter(e => e.date === todayISO());
-                  const tokensToday = todayActivity.reduce((sum, e) => sum + EARN_AMOUNTS[e.type], 0);
-                  return (
-                    <div className="sidebar-card" style={{ padding: "1.25rem", cursor: "pointer" }} onClick={() => setShowProgressModal(true)}>
-                      <h3 style={{ borderBottom: "2px solid var(--primary-light)", paddingBottom: "0.5rem", marginBottom: "0.85rem" }}>
-                        {T.progress.dailyTitle}
-                      </h3>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
-                        <span style={{ fontSize: "2.25rem", lineHeight: 1 }}>{stage.emoji}</span>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: "700", color: "var(--primary)", fontSize: "0.95rem" }}>
-                            {T.progress.stages[stage.nameKey as keyof typeof T.progress.stages]}
-                          </div>
-                          <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
-                            {T.progress.tokensLabel}: {progressData.firstStepTokens}
-                          </div>
+            {/* ----- Main column ----- */}
+            <div style={{ flex: 1.4, display: "flex", flexDirection: "column", gap: "1.5rem", minWidth: 0 }}>
+
+              {/* Welcome */}
+              <div>
+                <h2 style={{ marginBottom: "0.25rem" }}>👋 {T.dashboard.welcome}</h2>
+              </div>
+
+              {/* Today's Focus — the single highlighted task */}
+              <div className="card" style={{ padding: "1.75rem", background: "linear-gradient(135deg, var(--primary-light), #ffffff)", border: "2px solid var(--primary)", boxShadow: "0 8px 28px var(--accent-glow, rgba(0,0,0,0.06))" }}>
+                <h3 style={{ fontSize: "1rem", color: "var(--primary-hover)", marginBottom: "1rem" }}>{T.dashboard.focusTitle}</h3>
+                {focusTask ? (
+                  <>
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+                      <h4 style={{ fontSize: "1.35rem", fontWeight: "800", color: "var(--text-main)", lineHeight: 1.3 }}>⭐ {focusTask.title}</h4>
+                      {renderDeadlineBadge(focusTask.deadline, "md")}
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "1.25rem", fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: "1rem" }}>
+                      <span>🧭 {T.dashboard.nextStepLabel}: <strong style={{ color: "var(--text-main)" }}>{focusNext ? focusNext.title : "—"}</strong></span>
+                      <span>⏱️ {focusNext?.estimatedTime || T.dashboard.noEstimate}</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: focusTone ? "1rem" : "1.25rem" }}>
+                      <div style={{ flex: 1, height: "8px", backgroundColor: "#ffffff", borderRadius: "4px", overflow: "hidden", border: "1px solid var(--border)" }}>
+                        <div style={{ width: `${focusProgress}%`, height: "100%", backgroundColor: "var(--primary)" }} />
+                      </div>
+                      <span style={{ fontSize: "0.8rem", fontWeight: "700", color: "var(--primary)" }}>{focusProgress}%</span>
+                    </div>
+                    {focusTone && (
+                      <p style={{ fontSize: "0.85rem", color: "var(--text-main)", lineHeight: 1.6, backgroundColor: "#ffffffaa", borderRadius: "0.75rem", padding: "0.6rem 0.85rem", borderLeft: "3px solid var(--primary)", marginBottom: "1.25rem" }}>
+                        {focusTone}
+                      </p>
+                    )}
+                    <button onClick={() => handleOpenParentTask(focusTask.id)} className="btn btn-primary" style={{ width: "100%", padding: "1rem", fontSize: "1.05rem" }}>
+                      ▶ {T.dashboard.continueBtn}
+                    </button>
+                  </>
+                ) : (
+                  <div style={{ textAlign: "center", padding: "1rem 0" }}>
+                    <p style={{ fontSize: "1.05rem", fontWeight: "700", color: "var(--text-main)", marginBottom: "0.5rem" }}>{T.dashboard.focusEmpty}</p>
+                    <p style={{ fontSize: "0.9rem", color: "var(--text-muted)" }}>{T.dashboard.focusEmptyBody}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Recent Progress */}
+              <div className="card" style={{ padding: "1.5rem" }}>
+                <h3 style={{ fontSize: "1rem", marginBottom: "1rem" }}>{T.dashboard.recentTitle}</h3>
+                {recentCompletedSubtasks.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                    {recentCompletedSubtasks.map(({ sub, task }) => (
+                      <div key={sub.id} style={{ display: "flex", alignItems: "center", gap: "0.65rem", fontSize: "0.9rem" }}>
+                        <span style={{ color: "var(--primary)", fontWeight: "700" }}>✓</span>
+                        <span style={{ color: "var(--text-main)", textDecoration: "line-through", opacity: 0.85 }}>{sub.title}</span>
+                        <span style={{ fontSize: "0.72rem", color: "var(--text-light)", marginLeft: "auto", whiteSpace: "nowrap" }}>{task.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: "0.88rem", color: "var(--text-muted)" }}>{T.dashboard.recentEmpty}</p>
+                )}
+              </div>
+
+              {/* Create a new task */}
+              <div className="card" style={{ padding: "1.5rem" }}>
+                <h3 style={{ fontSize: "1rem", marginBottom: "1rem" }}>{T.dashboard.createTitle}</h3>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "1rem" }}>
+                  {T.landing.examples.map((example, i) => (
+                    <button key={i} type="button" onClick={() => handleExampleChipClick(example)} className="example-chip"
+                      style={{ padding: "0.4rem 0.85rem", fontSize: "0.8rem", borderRadius: "9999px", border: "1px solid var(--primary-light)", backgroundColor: "var(--primary-light)", color: "var(--primary)", cursor: "pointer", fontWeight: "500", transition: "var(--transition-smooth)" }}>
+                      {example}
+                    </button>
+                  ))}
+                </div>
+                <form onSubmit={handleTaskSubmit} className="input-group">
+                  <textarea id="task-input" className="input-field" rows={3}
+                    placeholder={T.landing.placeholder}
+                    value={originalTask} onChange={(e) => setOriginalTask(e.target.value)}
+                    style={{ resize: "none" }} required />
+                  <button type="submit" className="btn btn-primary" style={{ marginTop: "1rem" }}>
+                    <span>✨</span> {T.landing.submitBtn}
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            {/* ----- Sidebar ----- */}
+            <div className="landing-sidebar" style={{ flex: 1, display: "flex", flexDirection: "column", gap: "1.5rem", minWidth: 0 }}>
+
+              {/* Penguin Companion */}
+              {(() => {
+                const stage = getPenguinStage(progressData.firstStepTokens);
+                return (
+                  <div className="sidebar-card" style={{ padding: "1.25rem", cursor: "pointer" }} onClick={() => setShowProgressModal(true)}>
+                    <h3 style={{ borderBottom: "2px solid var(--primary-light)", paddingBottom: "0.5rem", marginBottom: "0.85rem" }}>
+                      {T.dashboard.companionTitle}
+                    </h3>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+                      <span className="penguin-idle" style={{ fontSize: "2.6rem", lineHeight: 1 }}>{stage.emoji}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: "700", color: "var(--primary)", fontSize: "0.95rem" }}>
+                          {T.progress.stages[stage.nameKey as keyof typeof T.progress.stages]}
                         </div>
-                        {tokensToday > 0 && (
-                          <span style={{ fontSize: "0.8rem", fontWeight: "700", color: "var(--accent-hover)", backgroundColor: "var(--accent-light)", padding: "0.25rem 0.65rem", borderRadius: "9999px" }}>
-                            +{tokensToday} 🐣
+                        <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
+                          {T.progress.tokensLabel}: {progressData.firstStepTokens}
+                        </div>
+                      </div>
+                      {tokensEarnedToday > 0 && (
+                        <span style={{ fontSize: "0.9rem", fontWeight: "800", color: "var(--accent-hover)", backgroundColor: "var(--accent-light)", padding: "0.3rem 0.7rem", borderRadius: "9999px" }}>
+                          🐣 +{tokensEarnedToday}
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.75rem" }}>
+                      {tokensEarnedToday > 0 ? `${T.dashboard.earnedToday}: +${tokensEarnedToday} 🐣` : T.dashboard.noTokensToday}
+                    </p>
+                  </div>
+                );
+              })()}
+
+              {/* Tomorrow / Up next preview */}
+              <div className="sidebar-card" style={{ padding: "1.25rem" }}>
+                <h3 style={{ borderBottom: "2px solid var(--accent-light)", paddingBottom: "0.5rem", marginBottom: "0.85rem" }}>{T.dashboard.tomorrowTitle}</h3>
+                {tomorrowTask ? (
+                  <div onClick={() => handleOpenParentTask(tomorrowTask.id)} style={{ cursor: "pointer" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", flexWrap: "wrap" }}>
+                      <h4 style={{ fontSize: "0.95rem", fontWeight: "700", color: "var(--text-main)" }}>{tomorrowTask.title}</h4>
+                      {renderDeadlineBadge(tomorrowTask.deadline)}
+                    </div>
+                  </div>
+                ) : (
+                  <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>{T.dashboard.tomorrowEmpty}</p>
+                )}
+              </div>
+
+              {/* Victory Wall entry */}
+              <button className="btn btn-secondary" onClick={() => setAppStep("victory_wall")}
+                style={{ padding: "0.95rem", fontSize: "0.95rem", fontWeight: "700" }}>
+                {T.dashboard.victoryWallBtn}
+              </button>
+
+              {/* All tasks */}
+              <div className="sidebar-card" style={{ display: "flex", flexDirection: "column", maxHeight: "360px" }}>
+                <h3 style={{ borderBottom: "2px solid var(--accent-light)", paddingBottom: "0.75rem", marginBottom: "1rem" }}>
+                  {T.dashboard.allTasksTitle}
+                </h3>
+                <div className="saved-task-list" style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "0.85rem", paddingRight: "0.25rem" }}>
+                  {savedTasks.map((task) => {
+                    const progress = getProgressPercentage(task);
+                    const modeInfo = SUPPORT_MODES.find(m => m.id === task.supportMode);
+                    const modeLabel = T.modes[task.supportMode as keyof typeof T.modes]?.label;
+                    const done = isTaskDone(task);
+                    return (
+                      <div key={task.id} className="saved-task-card"
+                        onClick={() => handleOpenParentTask(task.id)}
+                        style={{ padding: "1rem", border: "1px solid var(--border)", borderRadius: "1rem", backgroundColor: done ? "var(--primary-light)" : "#ffffff", cursor: "pointer", transition: "var(--transition-smooth)", position: "relative" }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
+                          <h4 style={{ fontSize: "0.9rem", fontWeight: "700", color: "var(--text-main)", marginBottom: "0.35rem" }}>
+                            {done ? "✓ " : ""}{task.title}
+                          </h4>
+                          {renderDeadlineBadge(task.deadline)}
+                        </div>
+                        {modeInfo && (
+                          <span style={{ fontSize: "0.7rem", color: "var(--primary)", fontWeight: "600", display: "inline-block", marginBottom: "0.4rem" }}>
+                            {modeInfo.emoji} {modeLabel ?? modeInfo.label}
                           </span>
                         )}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                <div className="sidebar-card" style={{ flex: 1, maxHeight: "430px", display: "flex", flexDirection: "column" }}>
-                  <h3 style={{ borderBottom: "2px solid var(--accent-light)", paddingBottom: "0.75rem", marginBottom: "1rem" }}>
-                    {T.landing.workspaceTitle}
-                  </h3>
-                  <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "1rem" }}>
-                    {T.landing.workspaceDesc}
-                  </p>
-                  <div className="saved-task-list" style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "1rem", paddingRight: "0.25rem" }}>
-                    {savedTasks.map((task) => {
-                      const progress = getProgressPercentage(task);
-                      const modeInfo = SUPPORT_MODES.find(m => m.id === task.supportMode);
-                      const modeLabel = T.modes[task.supportMode as keyof typeof T.modes]?.label;
-                      return (
-                        <div key={task.id} className="saved-task-card"
-                          onClick={() => handleOpenParentTask(task.id)}
-                          style={{ padding: "1.15rem", border: "1px solid var(--border)", borderRadius: "1rem", backgroundColor: "#ffffff", cursor: "pointer", transition: "var(--transition-smooth)", position: "relative" }}>
-                          <h4 style={{ fontSize: "0.95rem", fontWeight: "700", color: "var(--text-main)", marginBottom: "0.35rem", paddingRight: "3rem" }}>
-                            {task.title}
-                          </h4>
-                          {modeInfo && (
-                            <span style={{ fontSize: "0.72rem", color: "var(--primary)", fontWeight: "600", display: "inline-block", marginBottom: "0.4rem" }}>
-                              {modeInfo.emoji} {modeLabel ?? modeInfo.label}
-                            </span>
-                          )}
-                          <span style={{ fontSize: "0.75rem", color: "var(--text-light)", display: "block", marginBottom: "0.75rem" }}>
-                            📅 {task.createdAt}
-                          </span>
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                            <div style={{ flex: 1, height: "6px", backgroundColor: "var(--bg-base)", borderRadius: "3px", overflow: "hidden" }}>
-                              <div style={{ width: `${progress}%`, height: "100%", backgroundColor: "var(--primary)" }} />
-                            </div>
-                            <span style={{ fontSize: "0.75rem", fontWeight: "700", color: "var(--primary)" }}>{progress}%</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                          <div style={{ flex: 1, height: "5px", backgroundColor: "var(--bg-base)", borderRadius: "3px", overflow: "hidden" }}>
+                            <div style={{ width: `${progress}%`, height: "100%", backgroundColor: "var(--primary)" }} />
                           </div>
+                          <span style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--primary)" }}>{progress}%</span>
                         </div>
-                      );
-                    })}
-                  </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -931,6 +1148,15 @@ ${T.copyPlan.footer}`;
               <button type="button" onClick={addBlankSubtask} className="btn btn-secondary" style={{ borderStyle: "dashed", width: "100%", padding: "0.85rem" }}>
                 {T.editing.addBtn}
               </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", padding: "0.85rem 1rem", border: "1px solid var(--border)", borderRadius: "1rem", backgroundColor: "var(--bg-base)" }}>
+                <label htmlFor="create-deadline" style={{ fontSize: "0.9rem", fontWeight: "700", color: "var(--text-main)" }}>📅 {T.deadline.optional}</label>
+                <input id="create-deadline" type="date" className="input-field" value={deadlineInput}
+                  onChange={(e) => setDeadlineInput(e.target.value)}
+                  style={{ margin: 0, flex: 1, minWidth: "160px" }} />
+                {deadlineInput && (
+                  <button type="button" onClick={() => setDeadlineInput("")} className="btn btn-text" style={{ fontSize: "0.8rem" }}>{T.deadline.clearBtn}</button>
+                )}
+              </div>
               <div style={{ display: "flex", gap: "1rem", marginTop: "1rem" }}>
                 <button onClick={() => setAppStep("mode_select")} className="btn btn-secondary" style={{ flex: 1 }}>
                   {T.editing.backBtn}
@@ -960,6 +1186,25 @@ ${T.copyPlan.footer}`;
                   {copySuccess ? T.parentDetail.copiedBtn : T.parentDetail.copyBtn}
                 </button>
               </div>
+
+              {/* Deadline row — badge + inline date editor + urgency-tuned tone */}
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+                <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "var(--text-muted)" }}>📅 {T.deadline.label}</span>
+                {renderDeadlineBadge(currentParentTask.deadline, "md") ?? (
+                  <span style={{ fontSize: "0.85rem", color: "var(--text-light)" }}>{T.deadline.none}</span>
+                )}
+                <input type="date" className="input-field" value={currentParentTask.deadline || ""}
+                  onChange={(e) => setTaskDeadline(currentParentTask.id, e.target.value || null)}
+                  style={{ margin: 0, width: "auto", padding: "0.4rem 0.6rem", fontSize: "0.85rem" }} />
+                {currentParentTask.deadline && (
+                  <button type="button" onClick={() => setTaskDeadline(currentParentTask.id, null)} className="btn btn-text" style={{ fontSize: "0.8rem" }}>{T.deadline.clearBtn}</button>
+                )}
+              </div>
+              {deadlineToneMessage(currentParentTask.deadline) && (
+                <p style={{ fontSize: "0.85rem", color: "var(--text-main)", lineHeight: 1.6, backgroundColor: "var(--primary-light)", borderRadius: "0.75rem", padding: "0.6rem 0.85rem", borderLeft: "3px solid var(--primary)", marginBottom: "1rem" }}>
+                  {deadlineToneMessage(currentParentTask.deadline)}
+                </p>
+              )}
 
               {/* Today's Real Goal banner (editable) */}
               {renderGoalBanner(true)}
@@ -1360,6 +1605,142 @@ ${T.copyPlan.footer}`;
             </div>
           </div>
         )}
+
+        {/* ===== 6b. Celebration ===== */}
+        {appStep === "celebration" && celebrationTask && (() => {
+          const msgIdx = celebrationTask.title.length % T.celebration.messages.length;
+          const stage = getPenguinStage(progressData.firstStepTokens);
+          const confettiColors = ["#f9a8d4", "#fcd34d", "#86efac", "#93c5fd", "#c4b5fd", "#fdba74"];
+          return (
+            <div className="celebration-screen fade-in" style={{ position: "relative", overflow: "hidden" }}>
+              {/* Soft confetti */}
+              <div className="confetti-layer" aria-hidden="true">
+                {Array.from({ length: 16 }).map((_, i) => (
+                  <span key={i} className="confetti-piece" style={{
+                    left: `${(i * 6.25 + 3) % 100}%`,
+                    backgroundColor: confettiColors[i % confettiColors.length],
+                    animationDelay: `${(i % 8) * 0.18}s`,
+                    animationDuration: `${2.6 + (i % 4) * 0.35}s`,
+                  }} />
+                ))}
+              </div>
+
+              <div className="card" style={{ maxWidth: "560px", margin: "0 auto", padding: "2.5rem 2rem", textAlign: "center", position: "relative", zIndex: 1 }}>
+                <div className="penguin-celebrate" style={{ fontSize: "4.5rem", lineHeight: 1, marginBottom: "0.5rem" }}>{stage.emoji}</div>
+                <h2 style={{ fontSize: "1.8rem", color: "var(--primary-hover)", marginBottom: "1.25rem" }}>{T.celebration.congrats}</h2>
+
+                <p style={{ fontSize: "0.95rem", color: "var(--text-muted)", marginBottom: "0.35rem" }}>{T.celebration.youCompleted}</p>
+                <p style={{ fontSize: "1.35rem", fontWeight: "800", color: "var(--text-main)", marginBottom: "1.5rem", lineHeight: 1.3 }}>{celebrationTask.title}</p>
+
+                {/* Rewards */}
+                <div style={{ display: "flex", justifyContent: "center", gap: "1rem", flexWrap: "wrap", marginBottom: "1.5rem" }}>
+                  <div style={{ backgroundColor: "var(--accent-light)", borderRadius: "1rem", padding: "0.85rem 1.25rem" }}>
+                    <div style={{ fontSize: "1.5rem" }}>🐣</div>
+                    <div style={{ fontSize: "0.85rem", fontWeight: "700", color: "var(--accent-hover)" }}>{T.celebration.tokensReward.replace("{n}", String(EARN_AMOUNTS.task_complete))}</div>
+                  </div>
+                  <div style={{ backgroundColor: "var(--primary-light)", borderRadius: "1rem", padding: "0.85rem 1.25rem" }}>
+                    <div style={{ fontSize: "1.5rem" }}>⭐</div>
+                    <div style={{ fontSize: "0.85rem", fontWeight: "700", color: "var(--primary)" }}>{T.celebration.milestoneStar}</div>
+                  </div>
+                </div>
+
+                <p style={{ fontSize: "1rem", color: "var(--text-main)", lineHeight: 1.7, marginBottom: "1.75rem", fontWeight: "600" }}>
+                  {T.celebration.messages[msgIdx]}
+                </p>
+
+                {/* Reflection */}
+                <div style={{ textAlign: "left", marginBottom: "1.75rem" }}>
+                  <label className="input-label" style={{ fontSize: "0.9rem", color: "var(--text-main)" }}>{T.celebration.reflectionPrompt}</label>
+                  <textarea className="input-field" rows={2}
+                    placeholder={T.celebration.reflectionPlaceholder}
+                    value={celebrationReflection} onChange={(e) => setCelebrationReflection(e.target.value)}
+                    style={{ marginTop: "0.4rem", width: "100%", resize: "none" }} />
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                  <button onClick={() => leaveCelebration("victory_wall")} className="btn btn-primary" style={{ padding: "0.95rem", fontSize: "1rem" }}>
+                    {T.celebration.toVictoryWall}
+                  </button>
+                  <button onClick={() => leaveCelebration("landing")} className="btn btn-text" style={{ fontSize: "0.9rem" }}>
+                    {T.celebration.backHome}
+                  </button>
+                </div>
+              </div>
+
+              <style>{`
+                @keyframes confettiFall { 0% { transform: translateY(-20px) rotate(0deg); opacity: 0; } 15% { opacity: 1; } 100% { transform: translateY(90vh) rotate(320deg); opacity: 0; } }
+                @keyframes penguinCelebrate { 0%,100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-14px) rotate(4deg); } }
+                .confetti-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+                .confetti-piece { position: absolute; top: -20px; width: 9px; height: 14px; border-radius: 2px; opacity: 0; animation-name: confettiFall; animation-timing-function: ease-in; animation-iteration-count: infinite; }
+                .penguin-celebrate { display: inline-block; animation: penguinCelebrate 1.1s ease-in-out infinite; }
+                @media (prefers-reduced-motion: reduce) { .confetti-piece, .penguin-celebrate { animation: none; } .confetti-piece { display: none; } }
+              `}</style>
+            </div>
+          );
+        })()}
+
+        {/* ===== 6c. Victory Wall ===== */}
+        {appStep === "victory_wall" && (() => {
+          const dateLocale = lang === "ja" ? "ja-JP" : lang === "zh" ? "zh-CN" : "en-US";
+          const byYear = new Map<string, ParentTask[]>();
+          for (const t of completedTasks) {
+            const year = (t.completedAt || "").slice(0, 4) || "—";
+            if (!byYear.has(year)) byYear.set(year, []);
+            byYear.get(year)!.push(t);
+          }
+          const years = Array.from(byYear.keys()).sort((a, b) => (b > a ? 1 : -1));
+          return (
+            <div className="victory-wall fade-in" style={{ maxWidth: "760px", margin: "0 auto" }}>
+              <button onClick={() => setAppStep("landing")} className="btn btn-text" style={{ marginBottom: "1rem" }}>{T.victoryWall.backBtn}</button>
+              <div className="card" style={{ padding: "2rem" }}>
+                <h2 style={{ fontSize: "1.6rem", marginBottom: "0.35rem" }}>{T.victoryWall.title}</h2>
+                <p style={{ fontSize: "0.92rem", color: "var(--text-muted)", marginBottom: "0.35rem" }}>{T.victoryWall.subtitle}</p>
+                {completedTasks.length > 0 && (
+                  <p style={{ fontSize: "0.85rem", fontWeight: "700", color: "var(--primary)", marginBottom: "1.5rem" }}>
+                    ⭐ {T.victoryWall.countLabel.replace("{n}", String(completedTasks.length))}
+                  </p>
+                )}
+
+                {completedTasks.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "2.5rem 1rem" }}>
+                    <div style={{ fontSize: "3rem", marginBottom: "0.75rem" }}>🏔️</div>
+                    <p style={{ fontSize: "1.05rem", fontWeight: "700", color: "var(--text-main)", marginBottom: "0.5rem" }}>{T.victoryWall.empty}</p>
+                    <p style={{ fontSize: "0.9rem", color: "var(--text-muted)" }}>{T.victoryWall.emptyBody}</p>
+                  </div>
+                ) : (
+                  years.map((year) => (
+                    <div key={year} style={{ marginBottom: "1.75rem" }}>
+                      <h3 style={{ fontSize: "1.1rem", color: "var(--primary-hover)", borderBottom: "2px solid var(--primary-light)", paddingBottom: "0.4rem", marginBottom: "1rem" }}>{year}</h3>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                        {byYear.get(year)!.map((t) => {
+                          const doneCount = t.subtasks.filter(s => s.status === "completed").length;
+                          const dateStr = t.completedAt ? new Date(t.completedAt).toLocaleDateString(dateLocale, { year: "numeric", month: "short", day: "numeric" }) : "";
+                          return (
+                            <div key={t.id} style={{ padding: "1.15rem 1.25rem", border: "1px solid var(--border)", borderRadius: "1rem", backgroundColor: "var(--bg-base)" }}>
+                              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+                                <h4 style={{ fontSize: "1.05rem", fontWeight: "800", color: "var(--text-main)" }}>✓ {t.title}</h4>
+                                <span style={{ fontSize: "0.78rem", color: "var(--text-light)", whiteSpace: "nowrap" }}>{T.victoryWall.completedOn}: {dateStr}</span>
+                              </div>
+                              <p style={{ fontSize: "0.8rem", color: "var(--primary)", fontWeight: "600", marginTop: "0.35rem" }}>
+                                {T.victoryWall.stepsSummary.replace("{n}", String(doneCount))}
+                              </p>
+                              {t.reflection && (
+                                <p style={{ fontSize: "0.88rem", color: "var(--text-main)", lineHeight: 1.6, marginTop: "0.6rem", fontStyle: "italic", borderLeft: "3px solid var(--primary-light)", paddingLeft: "0.75rem" }}>
+                                  <span style={{ fontStyle: "normal", fontWeight: "700", color: "var(--text-muted)", fontSize: "0.75rem", display: "block", marginBottom: "0.2rem" }}>{T.victoryWall.reflectionLabel}</span>
+                                  {t.reflection}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ===== 7. Recovery Modal ===== */}
         {showRecoveryModal && (

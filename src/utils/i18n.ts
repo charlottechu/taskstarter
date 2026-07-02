@@ -204,6 +204,61 @@ export interface Translations {
     recoveryReward: string;
     recoveryCta: string;
   };
+  dashboard: {
+    welcome: string;
+    focusTitle: string;
+    focusEmpty: string;
+    focusEmptyBody: string;
+    continueBtn: string;
+    nextStepLabel: string;
+    noEstimate: string;
+    recentTitle: string;
+    recentEmpty: string;
+    companionTitle: string;
+    earnedToday: string;
+    noTokensToday: string;
+    tomorrowTitle: string;
+    tomorrowEmpty: string;
+    newTaskBtn: string;
+    victoryWallBtn: string;
+    allTasksTitle: string;
+    createTitle: string;
+  };
+  deadline: {
+    label: string;
+    none: string;
+    today: string;
+    overdue: string;
+    daysLeft: string;
+    setBtn: string;
+    editBtn: string;
+    clearBtn: string;
+    optional: string;
+    tone: { relaxed: string; soon: string; near: string; today: string; overdue: string };
+  };
+  celebration: {
+    congrats: string;
+    youCompleted: string;
+    rewardLabel: string;
+    tokensReward: string;
+    milestoneStar: string;
+    messages: string[];
+    reflectionPrompt: string;
+    reflectionPlaceholder: string;
+    toVictoryWall: string;
+    backHome: string;
+  };
+  victoryWall: {
+    title: string;
+    subtitle: string;
+    empty: string;
+    emptyBody: string;
+    backBtn: string;
+    completedOn: string;
+    reflectionLabel: string;
+    stepsSummary: string;
+    countLabel: string;
+  };
 }
 
 const ja: Translations = {
@@ -413,6 +468,72 @@ const ja: Translations = {
     recoveryBody: '{days}日ぶりに戻ってきてくれました。\nまた来てくれてありがとう。',
     recoveryReward: '🌱 回復の種 +1',
     recoveryCta: 'ありがとう、始めます',
+  },
+  dashboard: {
+    welcome: 'おかえりなさい',
+    focusTitle: '🎯 今日のフォーカス',
+    focusEmpty: '今日はここから始めましょう',
+    focusEmptyBody: '新しいタスクを追加すると、ここに「今日やる一つ」が表示されます。',
+    continueBtn: '続きから始める',
+    nextStepLabel: '次のステップ',
+    noEstimate: '目安なし',
+    recentTitle: '最近の進み',
+    recentEmpty: 'ここに完了したステップが表示されます。小さな一歩からで大丈夫。',
+    companionTitle: 'ペンギンの仲間',
+    earnedToday: '今日の獲得',
+    noTokensToday: '今日はまだこれから。ひとつ進めば🐣がもらえます。',
+    tomorrowTitle: '次にやること',
+    tomorrowEmpty: '次の候補はまだありません。',
+    newTaskBtn: '＋ 新しいタスク',
+    victoryWallBtn: '🏆 達成の壁',
+    allTasksTitle: 'すべてのタスク',
+    createTitle: '新しいタスクを始める',
+  },
+  deadline: {
+    label: '締め切り',
+    none: '締め切りなし',
+    today: '今日まで',
+    overdue: '期限を過ぎています',
+    daysLeft: 'あと{n}日',
+    setBtn: '締め切りを設定',
+    editBtn: '変更',
+    clearBtn: 'クリア',
+    optional: '締め切り（任意）',
+    tone: {
+      relaxed: 'まだ時間があります。自分のペースで進めて大丈夫です。',
+      soon: '一週間ほどあります。今日は少しだけ前に進めましょう。',
+      near: '締め切りが近づいています。細部より「核となる部分」を進めましょう。',
+      today: '今日が締め切りです。完璧さより、まず中身を完成させることに集中しましょう。',
+      overdue: '期限は過ぎていますが、今からでも大丈夫。今日できる一歩に集中しましょう。',
+    },
+  },
+  celebration: {
+    congrats: '✨ おめでとう！',
+    youCompleted: 'やり遂げました',
+    rewardLabel: 'ごほうび',
+    tokensReward: '+{n} ファーストステップ・トークン',
+    milestoneStar: 'マイルストーン・スター',
+    messages: [
+      '今日いちばんの難関を、あなたは超えました。',
+      '目標にまた一歩、近づきましたね。',
+      '「始められない」を、あなたは今日ひっくり返しました。',
+      'この一歩は、確かにあなたの積み重ねです。',
+    ],
+    reflectionPrompt: 'ひとことふり返り（任意）',
+    reflectionPlaceholder: '例：思ったより進めた。次はもう少し早く始めたい。',
+    toVictoryWall: '🏆 達成の壁で見る',
+    backHome: 'ホームに戻る',
+  },
+  victoryWall: {
+    title: '🏆 達成の壁',
+    subtitle: 'あなたが積み重ねてきた達成の記録です。',
+    empty: 'まだ達成はありません',
+    emptyBody: 'タスクを最後まで終えると、その記録がここに刻まれます。',
+    backBtn: '← ホームに戻る',
+    completedOn: '達成日',
+    reflectionLabel: 'ふり返り',
+    stepsSummary: '{n}ステップを完了',
+    countLabel: '{n}件の達成',
   },
 };
 
@@ -624,6 +745,72 @@ const en: Translations = {
     recoveryReward: '🌱 Recovery Seed +1',
     recoveryCta: 'Thanks, let\'s begin',
   },
+  dashboard: {
+    welcome: 'Welcome back',
+    focusTitle: "🎯 Today's Focus",
+    focusEmpty: "Let's start here today",
+    focusEmptyBody: 'Add a task and your one thing for today will show up here.',
+    continueBtn: 'Continue',
+    nextStepLabel: 'Next step',
+    noEstimate: 'No estimate',
+    recentTitle: 'Recent progress',
+    recentEmpty: 'Completed steps will appear here. Any small step counts.',
+    companionTitle: 'Penguin companion',
+    earnedToday: 'Earned today',
+    noTokensToday: "Nothing yet today — one step earns you a 🐣.",
+    tomorrowTitle: 'Up next',
+    tomorrowEmpty: 'No next task yet.',
+    newTaskBtn: '＋ New task',
+    victoryWallBtn: '🏆 Victory Wall',
+    allTasksTitle: 'All tasks',
+    createTitle: 'Start a new task',
+  },
+  deadline: {
+    label: 'Deadline',
+    none: 'No deadline',
+    today: 'Due today',
+    overdue: 'Past due',
+    daysLeft: '{n} days left',
+    setBtn: 'Set deadline',
+    editBtn: 'Edit',
+    clearBtn: 'Clear',
+    optional: 'Deadline (optional)',
+    tone: {
+      relaxed: 'Plenty of time. You can work at your own pace.',
+      soon: 'About a week to go. Just nudge it forward a little today.',
+      near: 'The deadline is close. Focus on the core, not the polish.',
+      today: 'Due today — focus on completing the core content instead of perfecting details.',
+      overdue: "It's past due, but that's okay. Just focus on one step you can do today.",
+    },
+  },
+  celebration: {
+    congrats: '✨ Congratulations!',
+    youCompleted: 'You completed',
+    rewardLabel: 'Reward',
+    tokensReward: '+{n} First Step Tokens',
+    milestoneStar: 'Milestone Star',
+    messages: [
+      "Today's biggest challenge is behind you.",
+      'You moved one step closer to your goal.',
+      'You turned "I can\'t start" into "I did it" today.',
+      'This step is a real part of everything you\'re building.',
+    ],
+    reflectionPrompt: 'A quick reflection (optional)',
+    reflectionPlaceholder: 'e.g. Went further than I expected. Next time I\'ll start a bit earlier.',
+    toVictoryWall: '🏆 See it on the Victory Wall',
+    backHome: 'Back home',
+  },
+  victoryWall: {
+    title: '🏆 Victory Wall',
+    subtitle: 'A record of everything you\'ve accomplished.',
+    empty: 'No achievements yet',
+    emptyBody: 'Finish a task all the way through and it will be carved here.',
+    backBtn: '← Back home',
+    completedOn: 'Completed',
+    reflectionLabel: 'Reflection',
+    stepsSummary: '{n} steps completed',
+    countLabel: '{n} achievements',
+  },
 };
 
 const zh: Translations = {
@@ -833,6 +1020,72 @@ const zh: Translations = {
     recoveryBody: '你已经离开了{days}天。\n谢谢你回来了。',
     recoveryReward: '🌱 回归之种 +1',
     recoveryCta: '谢谢，开始吧',
+  },
+  dashboard: {
+    welcome: '欢迎回来',
+    focusTitle: '🎯 今日焦点',
+    focusEmpty: '今天就从这里开始吧',
+    focusEmptyBody: '添加一个任务后，今天最该做的那一件会显示在这里。',
+    continueBtn: '继续',
+    nextStepLabel: '下一步',
+    noEstimate: '暂无预估',
+    recentTitle: '最近的进展',
+    recentEmpty: '完成的步骤会显示在这里。哪怕是一小步也算数。',
+    companionTitle: '企鹅伙伴',
+    earnedToday: '今日获得',
+    noTokensToday: '今天还没有开始——迈出一步就能得到一枚 🐣。',
+    tomorrowTitle: '接下来',
+    tomorrowEmpty: '暂时没有下一个任务。',
+    newTaskBtn: '＋ 新任务',
+    victoryWallBtn: '🏆 成就墙',
+    allTasksTitle: '全部任务',
+    createTitle: '开始一个新任务',
+  },
+  deadline: {
+    label: '截止日期',
+    none: '没有截止日期',
+    today: '今天截止',
+    overdue: '已过期',
+    daysLeft: '还剩 {n} 天',
+    setBtn: '设置截止日期',
+    editBtn: '修改',
+    clearBtn: '清除',
+    optional: '截止日期（可选）',
+    tone: {
+      relaxed: '时间还很充裕，按你自己的节奏来就好。',
+      soon: '大约还有一周。今天只要往前推进一点点就好。',
+      near: '截止日期临近了。先做「核心部分」，别纠结细节。',
+      today: '今天就要截止了——先把核心内容完成，别追求完美的细节。',
+      overdue: '虽然已经过期，但没关系。专注在今天能做的一步上就好。',
+    },
+  },
+  celebration: {
+    congrats: '✨ 恭喜你！',
+    youCompleted: '你完成了',
+    rewardLabel: '奖励',
+    tokensReward: '+{n} 第一步代币',
+    milestoneStar: '里程碑之星',
+    messages: [
+      '今天最大的挑战，已经被你跨过去了。',
+      '你又向目标靠近了一步。',
+      '你把「开始不了」变成了今天的「我做到了」。',
+      '这一步，实实在在是你积累的一部分。',
+    ],
+    reflectionPrompt: '简单回顾一下（可选）',
+    reflectionPlaceholder: '例如：比想象中推进得更多。下次想早一点开始。',
+    toVictoryWall: '🏆 在成就墙上看看',
+    backHome: '回到首页',
+  },
+  victoryWall: {
+    title: '🏆 成就墙',
+    subtitle: '这里记录着你一路走来的每一个成就。',
+    empty: '还没有成就',
+    emptyBody: '把一个任务彻底完成，它就会被刻在这里。',
+    backBtn: '← 回到首页',
+    completedOn: '完成于',
+    reflectionLabel: '回顾',
+    stepsSummary: '完成了 {n} 个步骤',
+    countLabel: '{n} 项成就',
   },
 };
 
